@@ -3,8 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>封神榜 · 地牢（第一章 · 网页原型）</title>
-<meta name="description" content="《封神榜》桌游第一章·地牢的纯前端网页原型：六边格地牢、4 阶段回合制、护送姬昌、单人配平辅助。双击即玩，无需安装。" />
+<title>封神榜 · 地牢（第一章原型 v0.3）</title>
 <link rel="stylesheet" href="style.css"/>
 </head>
 <body>
@@ -42,12 +41,12 @@
       </div>
       <div class="panel assist">
         <h3>原型辅助（偏离原规则）</h3>
-        <label><input type="checkbox" id="chkAssist" checked> 小兵复活上限 <b>1</b> 次／只（原规则：无限复活）</label>
-        <label><input type="checkbox" id="chkJiHp" checked> 姬昌生命 <b>12</b>，每回合走 <b>2</b> 格（原规则：1 血／1 格）</label>
-        <label><input type="checkbox" id="chkNei" checked> 单人配平：内力 <b>4</b>（原 1，补偿 4 人份输出）</label>
-        <label><input type="checkbox" id="chkSolo" checked> 单人配平：小兵 <b>2</b> 只（原 4 只）</label>
+        <label><input type="checkbox" id="chkAssist"> 小兵复活上限 <b>1</b> 次／只（原规则：无限复活）</label>
+        <label><input type="checkbox" id="chkJiHp"> 姬昌生命 <b>12</b>，每回合走 <b>2</b> 格（原规则：1 血／1 格）</label>
+        <label><input type="checkbox" id="chkNei"> 单人配平：内力 <b>4</b>（原 1，补偿 4 人份输出）</label>
+        <label><input type="checkbox" id="chkSolo"> 单人配平：小兵 <b>2</b> 只（原 4 只）</label>
         <label><input type="checkbox" id="chkDrill"> 演练模式：清空小兵（只验证护送与胜利判定）</label>
-        <div class="tip-dim">第一章原为 4 人局。单人原型下「无限复活 + 姬昌 1 血 + 敌方优先攻击姬昌」几乎无法通关，故默认开启以上两项。取消勾选即回到说明书原规则。</div>
+        <div class="tip-dim">第一章原为 4 人局。本原型默认严格遵循说明书原规则（姬昌 1 血／每回合 1 格、小兵 4 只、无限复活）。若单人实测过难，可勾选上方开关降低难度——这些均为偏离原规则的辅助项，需主动开启。</div>
       </div>
       <div class="panel deck-panel">
         <h3>敌方行动牌库</h3>

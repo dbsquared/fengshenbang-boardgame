@@ -249,7 +249,10 @@
   }
   // 原型辅助：原规则（说明书 P22「源源不断的敌兵」）为无限复活，单人原型下几乎无法通关，
   // 故默认限制每只小兵最多复活 3 次；取消勾选「辅助」即恢复原规则。
-  const ASSIST = { enabled: true, reviveLimit: 1, jiHpAssist: true, drill: false, soloScale: true, jiStep2: true, neiAssist: true };
+  // 默认严格遵循说明书原规则：不擅自改动任何属性。
+  // 姬昌 1 血 / 每回合 1 格；小兵 4 只；内力 1；小兵无限复活。
+  // 下方开关为「偏离原规则的辅助」，默认全部关闭，需用户主动勾选才生效。
+  const ASSIST = { enabled: false, reviveLimit: 999, jiHpAssist: false, drill: false, soloScale: false, jiStep2: false, neiAssist: false };
   // 姬昌生命：原规则 1（剧情卡 setup「1 枚数值为 1 的生命值标记」）；辅助模式下 6
   // （护送全程 8~9 步，弓兵射程 3 且优先攻击他，1 血必被点杀）。
   function jiHp() { return (ASSIST.enabled && ASSIST.jiHpAssist) ? 12 : 1; }

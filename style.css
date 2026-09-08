@@ -1,0 +1,158 @@
+/* 封神榜·地牢 — 水墨暗色主题 */
+:root{
+  --bg:#16130f;
+  --bg2:#1f1a14;
+  --ink:#e9e0cc;
+  --ink-dim:#a89c82;
+  --line:#3a3128;
+  --seal:#c0392b;
+  --seal2:#9c2b20;
+  --gold:#c9a24b;
+  --jade:#5fa8a0;
+  --wall:#2c2620;
+  --reach:#3a5a3a;
+  --tgt:#7a2f2f;
+  --shadow:0 6px 24px rgba(0,0,0,.45);
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{
+  background:radial-gradient(1200px 700px at 50% -10%, #241d15 0%, var(--bg) 60%);
+  color:var(--ink);
+  font-family:"KaiTi","STKaiti","楷体",ui-serif,Georgia,serif;
+  -webkit-font-smoothing:antialiased;
+}
+#app{max-width:1380px;margin:0 auto;padding:18px 20px 40px}
+header{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;
+  border-bottom:1px solid var(--line);padding-bottom:12px;margin-bottom:16px}
+.title{font-size:30px;letter-spacing:4px;font-weight:700;color:var(--ink)}
+.seal{display:inline-block;margin-left:10px;padding:2px 8px;border:2px solid var(--seal);
+  color:var(--seal);border-radius:6px;font-size:16px;letter-spacing:2px;transform:rotate(-3deg)}
+.statusbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.badge{background:var(--seal);color:#fff;padding:5px 14px;border-radius:20px;font-size:15px;letter-spacing:2px}
+.turn{color:var(--ink-dim);font-size:15px}
+.banner{font-size:18px;font-weight:700;padding:4px 12px;border-radius:6px}
+.banner.win{color:#fff;background:linear-gradient(90deg,var(--gold),#8a6d2b)}
+.banner.lose{color:#fff;background:linear-gradient(90deg,var(--seal),var(--seal2))}
+
+main{display:grid;grid-template-columns:1fr 360px;gap:20px;align-items:start}
+.board-wrap{background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:14px;box-shadow:var(--shadow);min-width:0}
+#board{width:100%;height:auto;display:block;touch-action:manipulation;background:#1a1410;border-radius:6px}
+/* 实景底图：第一章·地牢版图原图（岩壁/铁链/壁龛/灯笼） */
+.board-bg{opacity:1}
+/* 压暗层：保证棋子在暗色底图上仍可读 */
+.board-veil{fill:rgba(8,6,4,.18)}
+.hint{margin-top:10px;color:var(--ink-dim);font-size:13px;letter-spacing:1px}
+.hex{fill:rgba(240,229,203,.12);stroke:rgba(230,210,170,.75);stroke-width:1.2;cursor:default;transition:fill .15s}
+.hex.rock{fill:rgba(60,40,28,.55);stroke:rgba(40,25,18,.85);stroke-width:1.5;cursor:not-allowed}
+.hex.exit{fill:rgba(214,168,92,.35);stroke:var(--seal);stroke-width:2}
+.hex.reach{fill:rgba(104,186,116,.55);stroke:var(--reach);stroke-width:2;cursor:pointer}
+.hex.tgt{fill:rgba(214,84,72,.55);stroke:var(--tgt);stroke-width:2.2;cursor:crosshair}
+.hex.cat-reach{fill:rgba(140,200,230,.55);stroke:var(--jade);stroke-width:2;cursor:pointer}
+.hex.cat-tgt{fill:rgba(230,150,90,.65);stroke:#d97e2c;stroke-width:2.2;cursor:crosshair}
+.unit-circle{stroke:#000;stroke-width:3;cursor:help}
+.u-player{fill:var(--seal)}
+.u-ji{fill:var(--jade)}
+.u-boss{fill:var(--gold)}
+.u-minion{fill:#6b6157}
+.u-cat{fill:#5fa8e0;stroke:#fff;stroke-width:2}
+/* 圆内角色字（viewBox 单位，4080 宽下 96px ≈ 显示宽的 2.4%，随棋盘缩放） */
+.unit-label{fill:#fff;font-size:96px;text-anchor:middle;dominant-baseline:central;pointer-events:none;font-weight:700;paint-order:stroke;stroke:rgba(0,0,0,.55);stroke-width:10}
+.unit-hp{fill:#ffe2b8;font-size:40px;text-anchor:middle;pointer-events:none;font-weight:700;paint-order:stroke;stroke:rgba(0,0,0,.8);stroke-width:8}
+
+/* 单位悬停信息卡 */
+#unitTip{position:fixed;display:none;z-index:60;max-width:280px;background:rgba(22,16,10,.95);border:1px solid #a8452e;border-radius:8px;padding:10px 13px;color:#efe3cd;font-size:13px;line-height:1.6;pointer-events:none;box-shadow:0 6px 18px rgba(0,0,0,.55)}
+#unitTip b{color:#ffd9a0;font-size:14px}
+#unitTip .tip-dim{color:#b8a888;font-size:12px}
+.exit-glow{fill:none;stroke:var(--seal);stroke-width:1;opacity:.5}
+.marker{fill:var(--gold);font-size:18px;text-anchor:middle;dominant-baseline:central;font-weight:700;pointer-events:none}
+
+.sidebar{display:flex;flex-direction:column;gap:14px}
+.panel{background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:12px 14px;box-shadow:var(--shadow)}
+.panel h3{margin:0 0 8px;font-size:15px;letter-spacing:2px;color:var(--gold);border-left:3px solid var(--seal);padding-left:8px}
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px}
+.stat{background:#241d15;border:1px solid var(--line);border-radius:8px;padding:6px 4px;text-align:center}
+.stat .k{font-size:11px;color:var(--ink-dim)}
+.stat .v{font-size:18px;font-weight:700}
+.hpbar{height:12px;background:#241d15;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin:4px 0}
+.hpbar>i{display:block;height:100%;background:linear-gradient(90deg,var(--seal),var(--gold))}
+.sub{display:flex;justify-content:space-between;font-size:13px;color:var(--ink-dim);margin-top:4px}
+.sub b{color:var(--ink)}
+
+.hand{display:flex;flex-wrap:wrap;gap:8px}
+.card{width:74px;min-height:96px;background:linear-gradient(180deg,#efe4cb,#d9c9a6);color:#2a2118;
+  border-radius:10px;padding:7px 6px;border:1px solid #b09a6a;cursor:pointer;position:relative;
+  box-shadow:0 3px 8px rgba(0,0,0,.4);transition:transform .12s,border-color .12s;font-family:inherit}
+.card:hover{transform:translateY(-3px)}
+.card.sel{border-color:var(--seal);box-shadow:0 0 0 2px var(--seal),0 4px 10px rgba(0,0,0,.5)}
+.card.dis{opacity:.4;cursor:not-allowed;filter:grayscale(.6)}
+.card .nm{font-size:13px;font-weight:700;line-height:1.2}
+.card .cost{position:absolute;top:4px;right:5px;background:var(--seal);color:#fff;border-radius:50%;
+  width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:12px}
+.card .ds{font-size:10px;color:#5a4a30;margin-top:6px;line-height:1.25}
+.card .wp{position:absolute;bottom:4px;left:5px;font-size:10px;color:#7a5a20}
+
+.actions{display:flex;gap:10px}
+button{flex:1;font-family:inherit;font-size:15px;letter-spacing:2px;padding:11px 6px;border-radius:10px;
+  border:1px solid var(--line);background:#241d15;color:var(--ink);cursor:pointer;transition:.12s}
+button:hover:not(:disabled){background:#2e251b}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.primary{background:var(--seal);border-color:var(--seal);color:#fff}
+button.primary:hover:not(:disabled){background:var(--seal2)}
+.log{height:150px;overflow:auto;font-size:12.5px;line-height:1.6;color:var(--ink-dim);
+  background:#14110d;border:1px solid var(--line);border-radius:8px;padding:8px}
+.log .l{margin:0 0 3px;padding-left:10px;border-left:2px solid var(--line)}
+.log .l.hit{color:#e6a23c;border-color:var(--gold)}
+.log .l.win{color:var(--gold);border-color:var(--gold)}
+.log .l.bad{color:#e36b6b;border-color:var(--seal)}
+@media(max-width:880px){main{grid-template-columns:1fr}}
+
+/* 英雄头像 + 装备 */
+.hero-row{display:flex;gap:10px;align-items:center;margin-bottom:10px}
+.hero-portrait{width:104px;height:142px;object-fit:cover;object-position:top center;border:2px solid var(--seal);border-radius:8px;
+  background:#241d15;flex:none;box-shadow:0 2px 10px rgba(0,0,0,.55)}
+.hero-row .meta{flex:1;min-width:0}
+.hero-row h3{margin:0 0 4px}
+.eq-line{font-size:12px;color:var(--ink-dim);line-height:1.5}
+.eq-row{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px}
+.eq-card{background:#241d15;border:1px solid var(--line);border-radius:8px;overflow:hidden;display:flex;flex-direction:column}
+.eq-card img{width:100%;height:84px;object-fit:cover;display:block;border-bottom:1px solid var(--line);background:#1a1410}
+.eq-info{padding:5px 6px;line-height:1.4}
+.eq-name{font-size:12px;font-weight:700;color:var(--gold);margin-bottom:3px}
+.eq-stats{font-size:10.5px;color:var(--ink-dim);display:flex;flex-wrap:wrap;gap:2px 6px;align-items:center}
+.eq-stats .c-red{color:#e36b6b;font-weight:700;margin-left:2px}
+.eq-stats .c-green{color:#6fb46f;font-weight:700;margin-left:2px}
+.eq-stats .c-blue{color:#6ea7e3;font-weight:700;margin-left:2px}
+.eq-stats .c-orange{color:#e3a96e;font-weight:700;margin-left:2px}
+.eq-bonus{font-size:10px;color:var(--jade);margin-top:2px}
+.stat-grid .stat .v.c-red{color:#e36b6b}
+.stat-grid .stat .v.c-green{color:#6fb46f}
+.stat-grid .stat .v.c-blue{color:#6ea7e3}
+.stat-grid .stat .v.c-orange{color:#e3a96e}
+
+/* 模态框 */
+.modal{position:fixed;inset:0;background:rgba(8,6,4,.78);display:flex;align-items:center;justify-content:center;z-index:50;padding:20px}
+.modal.hidden{display:none}
+.modal-box{background:var(--bg2);border:1px solid var(--line);border-radius:14px;max-width:760px;width:100%;
+  max-height:86vh;overflow:auto;padding:20px 22px;position:relative;box-shadow:var(--shadow)}
+.modal-close{position:absolute;top:10px;right:12px;background:transparent;border:1px solid var(--line);
+  color:var(--ink);width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:16px}
+.modal h2{margin:0 0 12px;color:var(--gold);letter-spacing:2px}
+.story-text{font-size:15px;line-height:1.9;color:var(--ink);white-space:pre-wrap}
+.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-top:6px}
+.gallery figure{margin:0;background:#14110d;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.gallery img{width:100%;height:120px;object-fit:cover;display:block;cursor:zoom-in;transition:transform .15s}
+.gallery img:hover{transform:scale(1.04)}
+.gallery figcaption{padding:5px 7px;font-size:11px;color:var(--ink-dim)}
+.gallery img.zoom{height:auto;max-height:70vh;object-fit:contain}
+
+/* 原型辅助面板（偏离原规则，虚线边框以示区别） */
+.panel.assist{border-style:dashed}
+.panel.assist label{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--ink);cursor:pointer}
+.panel.assist label input{width:15px;height:15px;accent-color:var(--seal)}
+.panel.assist .tip-dim{display:block;margin-top:7px;font-size:12px;color:var(--ink-dim);line-height:1.65}
+
+/* 敌方行动牌库面板 */
+.deck-panel .deck-line{display:flex;gap:14px;font-size:13px;color:var(--ink);margin-bottom:4px}
+.deck-panel .deck-line b{color:var(--gold)}
+.panel .tip-dim{display:block;margin-top:5px;font-size:12px;color:var(--ink-dim);line-height:1.6}

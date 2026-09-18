@@ -204,7 +204,10 @@
   function makeSpiritCat() {
     return { id: 'cat', name: '通灵猫', char: '貓', kind: 'spirit', isSpirit: true,
              pos: { col: player.pos.col, row: player.pos.row },
-             move: 2, atk: 1, range: 1, alive: true, used: false };
+             move: 2, atk: 1, range: 1, alive: true, used: false,
+             // 规则书未给出灵兽卡生命值；原型中通灵猫非敌方目标（不可被击伤），
+             // 此处仅用于界面显示，不进入任何伤害/死亡判定。
+             hp: 1, maxHp: 1 };
   }
 
   /* ---------------- 单位 ---------------- */

@@ -156,3 +156,13 @@ button.primary:hover:not(:disabled){background:var(--seal2)}
 .deck-panel .deck-line{display:flex;gap:14px;font-size:13px;color:var(--ink);margin-bottom:4px}
 .deck-panel .deck-line b{color:var(--gold)}
 .panel .tip-dim{display:block;margin-top:5px;font-size:12px;color:var(--ink-dim);line-height:1.6}
+
+/* ---------------- 行动动画（WAAPI，由 game.js 控制时序） ---------------- */
+/* 单位用 <g class="unit" data-uid> 包裹，移动/抖动即对整组 transform */
+.unit{ will-change: transform; }
+/* 飘字：伤害（红）/ 治疗（绿）/ 格挡（金） */
+.dmg-float{
+  font-weight: 800; font-size: 92px; text-anchor: middle;
+  paint-order: stroke; stroke: #20160c; stroke-width: 5px;
+  pointer-events: none; user-select: none;
+}

@@ -205,9 +205,9 @@
     return { id: 'cat', name: '通灵猫', char: '貓', kind: 'spirit', isSpirit: true,
              pos: { col: player.pos.col, row: player.pos.row },
              move: 2, atk: 1, range: 1, alive: true, used: false,
-             // 规则书未给出灵兽卡生命值；原型中通灵猫非敌方目标（不可被击伤），
-             // 此处仅用于界面显示，不进入任何伤害/死亡判定。
-             hp: 1, maxHp: 1 };
+             // 灵兽卡 4P-11：生命 5；与玩家相邻时伤害 +1。
+             // 原型中仍暂列为非敌方目标（敌方不会主动攻击猫）。
+             hp: 5, maxHp: 5 };
   }
 
   /* ---------------- 单位 ---------------- */
@@ -421,8 +421,10 @@
   }
   function catAtk(en) {
     if (!spiritCat || !spiritCat.alive || !en || !en.alive) return;
-    en.hp -= spiritCat.atk;
-    log('通灵猫扑击' + en.name + '造成' + spiritCat.atk + '点伤害', 'hit');
+    let dmg = spiritCat.atk;
+    if (hexDist(spiritCat.pos, player.pos) === 1) dmg += 1;
+    en.hp -= dmg;
+    log('通灵猫扑击' + en.name + '造成' + dmg + '点伤害', 'hit');
     spiritCat.used = true; state.catMode = false;
     checkDeaths(); checkEnd(); render();
   }
@@ -780,8 +782,8 @@
       h += '<span class="tip-dim">无战斗力。走到他相邻格即触发剧情「找到姬昌」；之后石友相邻时点「护送姬昌」让他向最近的「卒」移动一格，抵达任意「卒」格即胜利。<br>注意：说明书 P22——若姬昌与玩家同时进入敌方射程，<b>敌方优先攻击姬昌</b>。</span>';
     } else if (cls === 'u-cat') {
       h += '<b>灵兽 · 通灵猫</b><br>';
-      h += '生命 ' + u.hp + '/' + u.maxHp + '（界面显示，非敌方目标）<br>';
-      h += '移动 2 ／ 伤害 1（交互阶段可操作）<br>';
+      h += '生命 ' + u.hp + '/' + u.maxHp + '（灵兽卡 4P-11；原型中敌方暂不攻击猫）<br>';
+      h += '移动 2 ／ 伤害 1（与玩家相邻则 +1，交互阶段可操作）<br>';
       h += '<span class="tip-dim">代替石友承受伤害；阶段结束自动收回</span>';
     }
     return h;

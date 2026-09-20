@@ -365,42 +365,57 @@
     if (!state.selectedCard || state.selectedCard.type !== 'attack') return false;
     return hexDist(player.pos, en.pos) <= state.selectedCard.range;
   }
-  function playCard(card, targetEnemy) {
+  async function playCard(card, targetEnemy) {
     if (!canPlay(card)) { log('无法施展：' + card.name, 'bad'); return; }
     const cost = cardCost(card);
     if (card.type === 'react') {
       player.blockNext = true;
       log('石友架招（格挡）：将抵消下一次伤害', 'hit');
+      render(); return;
     } else if (card.type === 'heal') {
       player.panel.neiLeft -= cost;
+      const before = player.panel.hp;
       player.panel.hp = Math.min(player.panel.maxHp, player.panel.hp + (card.healHp || 0));
       player.panel.neiLeft += (card.gainNei || 0);
       log('石友调息：恢复' + (card.healHp || 0) + '生命、内力+1', 'hit');
-    } else {
-      player.panel.neiLeft -= cost;
-      const dmg = cardDmg(card);
-      const hits = card.aoe ? enemiesInRange(card.range) : (targetEnemy ? [targetEnemy] : []);
-      hits.forEach(en => { en.hp -= dmg; log('石友以「' + card.name + '」对' + en.name + '造成' + dmg + '点伤害', 'hit'); });
-      if (hits.length === 0) log('「' + card.name + '」未命中目标', 'bad');
-      if (card.selfMove && targetEnemy) {
-        const p = pathTo(player.pos, targetEnemy.pos);
-        if (p && p.length) { const s = p[0]; if (!isOccupied(s)) player.pos = s; }
-      }
-      if (card.push && targetEnemy) {
-        // 沿 (enemy - player) 方向推1格
-        const dx = targetEnemy.pos.col - player.pos.col;
-        const dy = targetEnemy.pos.row - player.pos.row;
-        // 取最近方向
-        const dirs = [[1,0],[1,-1],[0,-1],[-1,0],[0,1],[1,1]];
-        let best = dirs[0], bestd = 999;
-        dirs.forEach(d => { const dd = Math.hypot(d[0]-dx, d[1]-dy); if (dd < bestd) { bestd = dd; best = d; } });
-        const np = { col: targetEnemy.pos.col + best[0], row: targetEnemy.pos.row + best[1] };
-        if (inBounds(np)) {
-          const cl = cellAt(np);
-          if (cl && cl.type !== 'wall' && cl.type !== 'rock' && !isOccupied(np)) {
-            targetEnemy.pos = np;
-            log(targetEnemy.name + '被推远一格', 'hit');
-          }
+      const healed = player.panel.hp - before;
+      if (healed > 0) await floatText(player.pos, '+' + healed, '#7CFC8C');
+      checkEnd(); render(); return;
+    }
+    // 攻击：先播放演出，再结算伤害（不改动任何规则数值）
+    state.busy = true;
+    player.panel.neiLeft -= cost;
+    const dmg = cardDmg(card);
+    const hits = card.aoe ? enemiesInRange(card.range) : (targetEnemy ? [targetEnemy] : []);
+    if (hits.length === 0) log('「' + card.name + '」未命中目标', 'bad');
+    for (const en of hits) {
+      const idx = enemies.indexOf(en);
+      await playAttack('p', 'm' + idx, player.pos, en.pos, dmg);
+      en.hp -= dmg;
+      log('石友以「' + card.name + '」对' + en.name + '造成' + dmg + '点伤害', 'hit');
+    }
+    // 自身位移（出招后前冲 1 格）
+    if (card.selfMove && targetEnemy && hits.length) {
+      const from = { col: player.pos.col, row: player.pos.row };
+      const p = pathTo(player.pos, targetEnemy.pos);
+      if (p && p.length) { const s = p[0]; if (!isOccupied(s)) player.pos = s; }
+      await animateMove('p', from, player.pos);
+    }
+    // 击退
+    if (card.push && targetEnemy && hits.length) {
+      const dx = targetEnemy.pos.col - player.pos.col;
+      const dy = targetEnemy.pos.row - player.pos.row;
+      const dirs = [[1,0],[1,-1],[0,-1],[-1,0],[0,1],[1,1]];
+      let best = dirs[0], bestd = 999;
+      dirs.forEach(d => { const dd = Math.hypot(d[0]-dx, d[1]-dy); if (dd < bestd) { bestd = dd; best = d; } });
+      const np = { col: targetEnemy.pos.col + best[0], row: targetEnemy.pos.row + best[1] };
+      if (inBounds(np)) {
+        const cl = cellAt(np);
+        if (cl && cl.type !== 'wall' && cl.type !== 'rock' && !isOccupied(np)) {
+          const efrom = { col: targetEnemy.pos.col, row: targetEnemy.pos.row };
+          targetEnemy.pos = np;
+          log(targetEnemy.name + '被推远一格', 'hit');
+          await animateMove('m' + enemies.indexOf(targetEnemy), efrom, np);
         }
       }
     }
@@ -408,6 +423,7 @@
     player.discard.push(card);
     state.attackPlayed = true; state.selectedCard = null;
     checkDeaths(); checkEnd(); render();
+    state.busy = false;
   }
 
   /* ---------------- 通灵猫行动 ---------------- */
@@ -419,20 +435,28 @@
     const p = pathTo(spiritCat.pos, c);
     return !!p;
   }
-  function catAtk(en) {
+  async function catAtk(en) {
     if (!spiritCat || !spiritCat.alive || !en || !en.alive) return;
+    state.busy = true;
     let dmg = spiritCat.atk;
     if (hexDist(spiritCat.pos, player.pos) === 1) dmg += 1;
+    const idx = enemies.indexOf(en);
+    await playAttack('cat', 'm' + idx, spiritCat.pos, en.pos, dmg);
     en.hp -= dmg;
     log('通灵猫扑击' + en.name + '造成' + dmg + '点伤害', 'hit');
     spiritCat.used = true; state.catMode = false;
     checkDeaths(); checkEnd(); render();
+    state.busy = false;
   }
-  function stepCat(toC) {
-    if (!spiritCat) return;
+  async function stepCat(toC) {
+    if (!spiritCat || state.busy) return;
+    state.busy = true;
+    const from = { col: spiritCat.pos.col, row: spiritCat.pos.row };
     spiritCat.pos = { col: toC.col, row: toC.row };
     log('通灵猫移动到 (' + toC.col + ',' + toC.row + ')', 'hit');
+    await animateMove('cat', from, spiritCat.pos);
     render();
+    state.busy = false;
   }
 
   /* ---------------- 原型辅助 ---------------- */
@@ -457,7 +481,7 @@
     }
   }
   /* ---------------- 敌方 AI ---------------- */
-  function enemyAct(e) {
+  async function enemyAct(e) {
     // 未触发剧情前姬昌在牢房里，不是合法目标。
     // 注：规则书 §4.4 灵兽也是敌方目标，但通灵猫缺少灵兽卡生命值数据，原型暂不列为目标。
     const targets = [player, jiChang]
@@ -466,6 +490,8 @@
     if (!targets.length) return;
     targets.sort((a, b) => hexDist(e.pos, a.pos) - hexDist(e.pos, b.pos));
     const moveTarget = targets[0];
+    const atkUid = 'm' + enemies.indexOf(e);
+    const start = { col: e.pos.col, row: e.pos.row };
     // 敌方移动规则：在射程内则停止移动（规则书 §4.4），否则向最近目标靠拢
     if (hexDist(e.pos, moveTarget.pos) > e.range) {
       const path = pathTo(e.pos, moveTarget.pos);
@@ -478,20 +504,29 @@
         }
       }
     }
+    if (start.col !== e.pos.col || start.row !== e.pos.row) await animateMove(atkUid, start, e.pos);
     // 说明书 P22「护送姬昌」：若姬昌与玩家同时处在敌方最近攻击范围内，敌方优先攻击姬昌
     const inRange = targets.filter(t => hexDist(e.pos, t.pos) <= e.range);
     if (inRange.length) {
       const tgt = (jiChang.hp > 0 && inRange.indexOf(jiChang) >= 0) ? jiChang : inRange[0];
-      enemyAttack(e, tgt);
+      await enemyAttack(e, tgt);
     }
   }
   // 注意：玩家的血量在 player.panel.hp，姬昌/小兵在各自的 .hp —— 统一走这两个存取器，
   // 否则会出现「攻击日志正常但玩家永远不掉血」的假象（v0.5 修复）。
   function hpOf(t) { return t === player ? player.panel.hp : t.hp; }
   function dealDamage(t, dmg) { if (t === player) player.panel.hp -= dmg; else t.hp -= dmg; }
-  function enemyAttack(e, target) {
+  async function enemyAttack(e, target) {
     let dmg = e.atk;
-    if (target.blockNext) { target.blockNext = false; log(target.name + '架招抵消了' + e.name + '的攻击！', 'hit'); return; }
+    if (target.blockNext) {
+      target.blockNext = false;
+      log(target.name + '架招抵消了' + e.name + '的攻击！', 'hit');
+      await floatText(target.pos, '格挡', '#ffd86b');
+      return;
+    }
+    const tgtUid = target === player ? 'p' : (target === jiChang ? 'ji' : '');
+    const atkUid = 'm' + enemies.indexOf(e);
+    await playAttack(atkUid, tgtUid, e.pos, target.pos, dmg);
     dealDamage(target, dmg);
     log(e.name + '攻击' + target.name + '，造成' + dmg + '点伤害', 'bad');
     if (target === player) {
@@ -581,7 +616,7 @@
     log('—— 敌方行动：' + card.name + '（' + card.code + '）· ' + unitName + ' ——');
     const actor = enemies.find(e => e.alive && e.type === card.type);
     if (actor) {
-      enemyAct(actor); checkEnd(); render();
+      await enemyAct(actor); checkEnd(); render();
       if (state.status !== 'playing') { state.busy = false; return; }
       await sleep(450);
     } else {
@@ -629,9 +664,13 @@
       }
     }
   }
-  function stepMove(c) {
+  async function stepMove(c) {
+    if (state.busy) return;
+    state.busy = true;
+    const from = { col: player.pos.col, row: player.pos.row };
     player.pos = { col: c.col, row: c.row };
     player.panel.moveLeft -= 1;
+    await animateMove('p', from, player.pos);
     const cell = cellAt(c);
     if (cell.feature === 'marker' && cell.markerType === 'heal') {
       const before = player.panel.hp;
@@ -646,12 +685,75 @@
           '，敌方在射程内会优先攻击他）', 'win');
     }
     render();
+    state.busy = false;
   }
 
   /* ---------------- 日志 ---------------- */
   function log(text, cls) {
     state.log.unshift({ t: text, c: cls || '' });
     if (state.log.length > 60) state.log.pop();
+  }
+
+  /* ---------------- 行动动画 ----------------
+   * 纯 WAAPI（Web Animations API）实现，不依赖 CSS 过渡；render() 每次重建整个 SVG，
+   * 故动画在「状态更新 + 下一次 render()」之前播放，结束后由 render() 重建到正确位置。
+   * 动画期间 state.busy=true 屏蔽输入。单位已包裹 <g class="unit" data-uid>，移动/抖动即整组 transform。
+   */
+  const ANIM = { moveDur: 300, hitDur: 420, floatDur: 750 };
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  function unitG(uid) { return document.querySelector('#board g.unit[data-uid="' + uid + '"]'); }
+  function centerPx(pos) { return hexCenter(pos.col, pos.row); }
+  function animateMove(uid, fromPos, toPos, dur) {
+    const g = unitG(uid); if (!g) return Promise.resolve();
+    const a = centerPx(fromPos), b = centerPx(toPos);
+    const dx = b.x - a.x, dy = b.y - a.y;
+    if (dx === 0 && dy === 0) return Promise.resolve();
+    return g.animate(
+      [{ transform: 'translate(0px,0px)' }, { transform: 'translate(' + dx + 'px,' + dy + 'px)' }],
+      { duration: dur || ANIM.moveDur, easing: 'cubic-bezier(.34,1.3,.64,1)', fill: 'forwards' }
+    ).finished.catch(function(){ return undefined; });
+  }
+  function floatText(pos, txt, color) {
+    return new Promise(function (res) {
+      const svg = document.getElementById('board');
+      const c = centerPx(pos);
+      const t = document.createElementNS(SVGNS, 'text');
+      t.setAttribute('x', c.x); t.setAttribute('y', c.y - SIZE * 0.35);
+      t.setAttribute('class', 'dmg-float');
+      t.style.fill = color;
+      t.textContent = txt;
+      svg.appendChild(t);
+      t.animate(
+        [{ transform: 'translateY(0)', opacity: 1 }, { transform: 'translateY(' + (-SIZE * 0.95) + 'px)', opacity: 0 }],
+        { duration: ANIM.floatDur, easing: 'ease-out' }
+      ).finished.then(function(){ t.remove(); res(); }).catch(function(){ t.remove(); res(); });
+    });
+  }
+  // 攻击演出：攻击方小幅前冲（远程封顶），目标抖动，目标位置飘伤害数字
+  async function playAttack(attackerUid, targetUid, fromPos, toPos, dmg) {
+    const gA = attackerUid ? unitG(attackerUid) : null;
+    const gT = unitG(targetUid);
+    const proms = [];
+    if (gA) {
+      const a = centerPx(fromPos), b = centerPx(toPos);
+      let dx = b.x - a.x, dy = b.y - a.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const L = Math.min(70, len * 0.32);
+      dx = dx / len * L; dy = dy / len * L;
+      proms.push(gA.animate(
+        [{ transform: 'translate(0,0)' }, { transform: 'translate(' + dx + 'px,' + dy + 'px)' }, { transform: 'translate(0,0)' }],
+        { duration: ANIM.hitDur, easing: 'ease-in-out' }
+      ).finished.catch(function(){ return undefined; }));
+    }
+    if (gT) {
+      proms.push(gT.animate(
+        [{ transform: 'translate(0,0)' }, { transform: 'translate(-12px,0)' }, { transform: 'translate(12px,0)' },
+         { transform: 'translate(-7px,0)' }, { transform: 'translate(7px,0)' }, { transform: 'translate(0,0)' }],
+        { duration: ANIM.hitDur, easing: 'ease-in-out' }
+      ).finished.catch(function(){ return undefined; }));
+    }
+    proms.push(floatText(toPos, '-' + dmg, '#ff6b6b'));
+    await Promise.all(proms);
   }
 
   /* ---------------- 渲染 ---------------- */
@@ -740,6 +842,7 @@
     });
     svg.innerHTML = s;
   }
+  // 每个单位包裹在 <g class="unit" data-uid> 中，便于整体位移/抖动（移动、攻击动画）
   function unit(u, cls, uid, idx, total) {
     let { x, y } = hexCenter(u.pos.col, u.pos.row);
     let r = SIZE * 0.55, fs = 96;
@@ -751,11 +854,13 @@
     UNIT_INFO[uid] = describeUnit(u, cls);
     const dim = (u === jiChang && !jiChang.found) ? ' opacity=".55"' : '';
     const kindAttr = u.type ? ' data-kind="' + u.type + '"' : '';
-    let out = '<circle class="unit-circle ' + cls + '" data-uid="' + uid + '" data-col="' + u.pos.col + '" data-row="' + u.pos.row +
+    let out = '<g class="unit" data-uid="' + uid + '">';
+    out += '<circle class="unit-circle ' + cls + '" data-uid="' + uid + '" data-col="' + u.pos.col + '" data-row="' + u.pos.row +
       '" cx="' + x + '" cy="' + y + '" r="' + r + '"' + dim + kindAttr + '/>';
     out += '<text class="unit-label" style="font-size:' + fs + 'px" x="' + x + '" y="' + y + '">' + u.char + '</text>';
     const hp = u.hp != null ? u.hp : (u.panel ? u.panel.hp : '');
     if (hp != '') out += '<text class="unit-hp" style="font-size:' + (total > 1 ? 30 : 40) + 'px" x="' + x + '" y="' + (y + r * 1.18) + '">' + hp + '</text>';
+    out += '</g>';
     return out;
   }
   /* 单位悬停信息卡内容 */

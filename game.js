@@ -422,8 +422,8 @@
     const idx = player.hand.indexOf(card); if (idx >= 0) player.hand.splice(idx, 1);
     player.discard.push(card);
     state.attackPlayed = true; state.selectedCard = null;
-    checkDeaths(); checkEnd(); render();
     state.busy = false;
+    checkDeaths(); checkEnd(); render();
   }
 
   /* ---------------- 通灵猫行动 ---------------- */
@@ -445,8 +445,8 @@
     en.hp -= dmg;
     log('通灵猫扑击' + en.name + '造成' + dmg + '点伤害', 'hit');
     spiritCat.used = true; state.catMode = false;
-    checkDeaths(); checkEnd(); render();
     state.busy = false;
+    checkDeaths(); checkEnd(); render();
   }
   async function stepCat(toC) {
     if (!spiritCat || state.busy) return;
@@ -455,8 +455,8 @@
     spiritCat.pos = { col: toC.col, row: toC.row };
     log('通灵猫移动到 (' + toC.col + ',' + toC.row + ')', 'hit');
     await animateMove('cat', from, spiritCat.pos);
-    render();
     state.busy = false;
+    render();
   }
 
   /* ---------------- 原型辅助 ---------------- */
@@ -684,8 +684,8 @@
       log('剧情·地牢深处：找到姬昌！他作为同伴加入行动（生命 ' + jiChang.maxHp +
           '，敌方在射程内会优先攻击他）', 'win');
     }
-    render();
     state.busy = false;
+    render();
   }
 
   /* ---------------- 日志 ---------------- */

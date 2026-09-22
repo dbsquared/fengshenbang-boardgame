@@ -200,11 +200,11 @@
   function cardDmg(card) { return card.dmgMode === 'fixed' ? card.dmg : Math.max(1, player.panel.wu - 1); }
 
   /* ---------------- 灵兽：通灵猫（琥珀串珠·特殊技能） ---------------- */
-  // 移动2格 + 对相邻敌人造成1伤害。交互阶段可派出，已派出的猫本回合不再行动。
+  // 移动2格 + 对相邻敌人造成1伤害。交互阶段可派出；每交互阶段可移动合计2格并攻击一次，阶段结束保留在场上。
   function makeSpiritCat() {
     return { id: 'cat', name: '通灵猫', char: '貓', kind: 'spirit', isSpirit: true,
              pos: { col: player.pos.col, row: player.pos.row },
-             move: 2, atk: 1, range: 1, alive: true, used: false,
+             move: 2, atk: 1, range: 1, alive: true, used: false, moveLeft: 2,
              // 灵兽卡 4P-11：生命 5；与玩家相邻时伤害 +1。
              // 原型中仍暂列为非敌方目标（敌方不会主动攻击猫）。
              hp: 5, maxHp: 5 };
@@ -401,14 +401,23 @@
       if (p && p.length) { const s = p[0]; if (!isOccupied(s)) player.pos = s; }
       await animateMove('p', from, player.pos);
     }
-    // 击退
+    // 击退：推到玩家→敌人延长线上的下一格；目标格不可移动则不推
     if (card.push && targetEnemy && hits.length) {
-      const dx = targetEnemy.pos.col - player.pos.col;
-      const dy = targetEnemy.pos.row - player.pos.row;
-      const dirs = [[1,0],[1,-1],[0,-1],[-1,0],[0,1],[1,1]];
-      let best = dirs[0], bestd = 999;
-      dirs.forEach(d => { const dd = Math.hypot(d[0]-dx, d[1]-dy); if (dd < bestd) { bestd = dd; best = d; } });
-      const np = { col: targetEnemy.pos.col + best[0], row: targetEnemy.pos.row + best[1] };
+      const path = pathTo(player.pos, targetEnemy.pos);
+      let dir = null;
+      if (path && path.length) {
+        const first = path[0];
+        dir = { col: first.col - player.pos.col, row: first.row - player.pos.row };
+      } else {
+        // 兜底：按玩家列奇偶取正确的六邻方向
+        const dx = targetEnemy.pos.col - player.pos.col;
+        const dy = targetEnemy.pos.row - player.pos.row;
+        const dirs = ODDQ_DIRS[player.pos.col & 1];
+        let best = dirs[0], bestd = 999;
+        dirs.forEach(d => { const dd = Math.hypot(d[0]-dx, d[1]-dy); if (dd < bestd) { bestd = dd; best = d; } });
+        dir = { col: best[0], row: best[1] };
+      }
+      const np = { col: targetEnemy.pos.col + dir.col, row: targetEnemy.pos.row + dir.row };
       if (inBounds(np)) {
         const cl = cellAt(np);
         if (cl && cl.type !== 'wall' && cl.type !== 'rock' && !isOccupied(np)) {
@@ -430,8 +439,10 @@
   // 派出 / 移动 / 攻击：交互阶段分两步：先点击召唤落点（≤2格且路径通），再点击相邻敌人攻击
   function canCatReach(c) {
     if (!spiritCat || !spiritCat.alive) return false;
+    // 不能落点于敌人或同伴（石友/姬昌）所在格
+    if (isOccupied(c)) return false;
     const d = hexDist(spiritCat.pos, c);
-    if (d > 2 || d === 0) return false;
+    if (d > spiritCat.moveLeft || d === 0) return false;
     const p = pathTo(spiritCat.pos, c);
     return !!p;
   }
@@ -450,10 +461,14 @@
   }
   async function stepCat(toC) {
     if (!spiritCat || state.busy) return;
+    if (isOccupied(toC)) { log('通灵猫不能进入已被占据的格子', 'bad'); return; }
+    const dist = hexDist(spiritCat.pos, toC);
+    if (dist > spiritCat.moveLeft || dist === 0) return;
     state.busy = true;
     const from = { col: spiritCat.pos.col, row: spiritCat.pos.row };
     spiritCat.pos = { col: toC.col, row: toC.row };
-    log('通灵猫移动到 (' + toC.col + ',' + toC.row + ')', 'hit');
+    spiritCat.moveLeft -= dist;
+    log('通灵猫移动到 (' + toC.col + ',' + toC.row + ')，剩余移动力 ' + spiritCat.moveLeft, 'hit');
     await animateMove('cat', from, spiritCat.pos);
     state.busy = false;
     render();
@@ -505,6 +520,8 @@
       }
     }
     if (start.col !== e.pos.col || start.row !== e.pos.row) await animateMove(atkUid, start, e.pos);
+    // 移动动画结束立即重绘，让单位基准位置同步到 DOM，否则后续攻击动画会受残留 transform 影响
+    render();
     // 说明书 P22「护送姬昌」：若姬昌与玩家同时处在敌方最近攻击范围内，敌方优先攻击姬昌
     const inRange = targets.filter(t => hexDist(e.pos, t.pos) <= e.range);
     if (inRange.length) {
@@ -594,8 +611,7 @@
     else if (state.phase === 'attack') { state.phase = 'interact'; state.selectedCard = null; }
     else if (state.phase === 'interact') {
       state.phase = 'enemy'; state.selectedCard = null; state.catMode = false;
-      // 通灵猫：本阶段出过则收回
-      if (spiritCat) { spiritCat = null; }
+      // 通灵猫：本阶段结束后不再强制收回，留在场上（用户反馈：不应回到石友身上）
       runEnemyPhase(); return;
     }
     render();
@@ -605,6 +621,8 @@
     player.panel.moveLeft = player.panel.move;
     player.panel.neiLeft = player.panel.nei;
     player.blockNext = false; state.busy = false; state.catMode = false;
+    // 通灵猫每回合刷新移动力与行动标记
+    if (spiritCat) { spiritCat.moveLeft = spiritCat.move; spiritCat.used = false; }
     render();
   }
   const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -889,7 +907,7 @@
       h += '<b>灵兽 · 通灵猫</b><br>';
       h += '生命 ' + u.hp + '/' + u.maxHp + '（灵兽卡 4P-11；原型中敌方暂不攻击猫）<br>';
       h += '移动 2 ／ 伤害 1（与玩家相邻则 +1，交互阶段可操作）<br>';
-      h += '<span class="tip-dim">代替石友承受伤害；阶段结束自动收回</span>';
+      h += '<span class="tip-dim">每交互阶段可移动合计 2 格并攻击一次；不能进入已被占据的格子</span>';
     }
     return h;
   }
@@ -946,7 +964,7 @@
       !(state.phase === 'attack' && !state.attackPlayed && player.discard.length > 0 && player.hand.length === 0);
     const adjacent = hexDist(player.pos, jiChang.pos) === 1;
     document.getElementById('btnEscort').disabled = !(state.phase === 'interact' && adjacent && jiChang.hp > 0);
-    document.getElementById('btnCat').disabled = !(state.phase === 'interact' && !spiritCat);
+    document.getElementById('btnCat').disabled = !(state.phase === 'interact' && (!spiritCat || !spiritCat.used));
     document.getElementById('btnEnd').disabled = state.busy || state.status !== 'playing';
   }
   function renderLog() {
@@ -1028,10 +1046,15 @@
       if (state.phase === 'interact' && hexDist(player.pos, jiChang.pos) === 1) stepJiChang();
     });
     document.getElementById('btnCat').addEventListener('click', () => {
-      if (state.phase !== 'interact' || spiritCat) return;
-      spiritCat = makeSpiritCat();
-      state.catMode = true;
-      log('琥珀串珠激活：派出通灵猫！点击 ≤2 格的格子移动，再点相邻敌人扑击', 'win');
+      if (state.phase !== 'interact') return;
+      if (!spiritCat) {
+        spiritCat = makeSpiritCat();
+        state.catMode = true;
+        log('琥珀串珠激活：派出通灵猫！每阶段可移动合计 2 格并攻击一次', 'win');
+      } else if (!spiritCat.used) {
+        state.catMode = !state.catMode;
+        log(state.catMode ? '切换至通灵猫操控' : '结束通灵猫操控', 'hit');
+      }
       render();
     });
     const chk = document.getElementById('chkAssist');

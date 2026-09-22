@@ -401,24 +401,21 @@
       if (p && p.length) { const s = p[0]; if (!isOccupied(s)) player.pos = s; }
       await animateMove('p', from, player.pos);
     }
-    // 击退：推到玩家→敌人延长线上的下一格；目标格不可移动则不推
+    // 击退：推到「玩家→敌人」延长线上的下一格（轴向 cube 坐标求直线方向，不绕障碍）；
+    // 目标格不可移动（墙/岩石/被占/越界）则不推。
     if (card.push && targetEnemy && hits.length) {
-      const path = pathTo(player.pos, targetEnemy.pos);
-      let dir = null;
-      if (path && path.length) {
-        const first = path[0];
-        dir = { col: first.col - player.pos.col, row: first.row - player.pos.row };
-      } else {
-        // 兜底：按玩家列奇偶取正确的六邻方向
-        const dx = targetEnemy.pos.col - player.pos.col;
-        const dy = targetEnemy.pos.row - player.pos.row;
-        const dirs = ODDQ_DIRS[player.pos.col & 1];
-        let best = dirs[0], bestd = 999;
-        dirs.forEach(d => { const dd = Math.hypot(d[0]-dx, d[1]-dy); if (dd < bestd) { bestd = dd; best = d; } });
-        dir = { col: best[0], row: best[1] };
+      const A = toCube(player.pos), B = toCube(targetEnemy.pos);
+      const dBx = B.x - A.x, dBy = B.y - A.y, dBz = B.z - A.z;   // 玩家→敌人向量
+      let bestN = null, bestDot = -Infinity;
+      for (const nb of neighbors(targetEnemy.pos)) {
+        if (!inBounds(nb)) continue;
+        const N = toCube(nb);
+        // 敌方的 6 邻中，与「玩家→敌人」向量最对齐的那个 = 延长线上的下一格
+        const dot = (N.x - A.x) * dBx + (N.y - A.y) * dBy + (N.z - A.z) * dBz;
+        if (dot > bestDot) { bestDot = dot; bestN = nb; }
       }
-      const np = { col: targetEnemy.pos.col + dir.col, row: targetEnemy.pos.row + dir.row };
-      if (inBounds(np)) {
+      if (bestN) {
+        const np = bestN;
         const cl = cellAt(np);
         if (cl && cl.type !== 'wall' && cl.type !== 'rock' && !isOccupied(np)) {
           const efrom = { col: targetEnemy.pos.col, row: targetEnemy.pos.row };

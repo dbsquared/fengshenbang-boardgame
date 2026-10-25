@@ -166,3 +166,50 @@ button.primary:hover:not(:disabled){background:var(--seal2)}
   paint-order: stroke; stroke: #20160c; stroke-width: 5px;
   pointer-events: none; user-select: none;
 }
+
+/* ---------------- 阶段切换动画（覆盖大地图） ---------------- */
+.board-stage{ position: relative; overflow: hidden; border-radius: 6px; }
+.phase-fx{
+  position: absolute; inset: 0; z-index: 30; pointer-events: none;
+  display: flex; align-items: center; justify-content: center; overflow: hidden;
+}
+.phase-fx .fx-band{
+  position: absolute; left: -6%; right: -6%; top: 50%;
+  height: clamp(120px, 30%, 260px);
+  transform: translateY(-50%) scaleY(.08) scaleX(.45);
+  background: linear-gradient(90deg, rgba(12,8,5,0) 0%, rgba(12,8,5,.93) 14%, rgba(12,8,5,.93) 86%, rgba(12,8,5,0) 100%);
+  border-top: 2px solid rgba(201,162,75,.72);
+  border-bottom: 2px solid rgba(201,162,75,.72);
+  opacity: 0;
+}
+.phase-fx .fx-band::after{
+  content: ''; position: absolute; inset: 0;
+  background: radial-gradient(ellipse at center, rgba(192,57,43,.42) 0%, rgba(192,57,43,0) 62%);
+}
+.phase-fx.show .fx-band{ animation: fxBand 1.15s cubic-bezier(.16,.84,.24,1) both; }
+@keyframes fxBand{
+  0%   { opacity: 0; transform: translateY(-50%) scaleY(.06) scaleX(.45); }
+  18%  { opacity: 1; }
+  52%  { transform: translateY(-50%) scaleY(1) scaleX(1); }
+  100% { opacity: 0; transform: translateY(-50%) scaleY(1.04) scaleX(1.02); }
+}
+.phase-fx .fx-text{ position: relative; text-align: center; opacity: 0; will-change: transform, opacity, filter; }
+.phase-fx.show .fx-text{ animation: fxText 1.35s cubic-bezier(.16,.84,.24,1) both; }
+@keyframes fxText{
+  0%   { opacity: 0; transform: scale(1.75) translateY(14px); filter: blur(10px); }
+  20%  { opacity: 1; transform: scale(1) translateY(0); filter: blur(0); }
+  72%  { opacity: 1; transform: scale(1.02) translateY(0); filter: blur(0); }
+  100% { opacity: 0; transform: scale(1.06) translateY(-10px); filter: blur(2px); }
+}
+.phase-fx .fx-title{
+  font-size: clamp(42px, 7.2vw, 104px); font-weight: 800; line-height: 1.05;
+  letter-spacing: .16em; text-indent: .16em; color: #f6e3b0;
+  text-shadow: 0 0 18px rgba(201,162,75,.75), 0 0 46px rgba(192,57,43,.45), 0 6px 22px rgba(0,0,0,.9);
+}
+.phase-fx .fx-sub{
+  margin-top: 10px; font-size: clamp(13px, 1.5vw, 20px); letter-spacing: .22em;
+  color: #e8d6ae; text-shadow: 0 2px 10px rgba(0,0,0,.9);
+}
+@media (prefers-reduced-motion: reduce){
+  .phase-fx.show .fx-band, .phase-fx.show .fx-text{ animation-duration: .01ms; }
+}

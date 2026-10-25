@@ -1196,7 +1196,9 @@
     UNIT_INFO[uid] = describeUnit(u, cls);
     const dim = (u === jiChang && !jiChang.found) ? ' opacity=".55"' : '';
     const kindAttr = u.type ? ' data-kind="' + u.type + '"' : '';
-    let out = '<g class="unit" data-uid="' + uid + '">';
+    // data-col/data-row 也放在 <g> 上：否则点到「字」或「血量」这两个子元素时，
+    // closest('[data-col]') 会落空 → 移动端点了半天没反应（圆圈面积远小于视觉上的单位）。
+    let out = '<g class="unit" data-uid="' + uid + '" data-col="' + u.pos.col + '" data-row="' + u.pos.row + '">';
     out += '<circle class="unit-circle ' + cls + '" data-uid="' + uid + '" data-col="' + u.pos.col + '" data-row="' + u.pos.row +
       '" cx="' + x + '" cy="' + y + '" r="' + r + '"' + dim + kindAttr + '/>';
     out += '<text class="unit-label" style="font-size:' + fs + 'px" x="' + x + '" y="' + y + '">' + u.char + '</text>';
@@ -1351,31 +1353,85 @@
 
   /* ---------------- 事件绑定 ---------------- */
   function bind() {
-    document.getElementById('board').addEventListener('click', e => {
+    const board = document.getElementById('board');
+    const tip = document.getElementById('unitTip');
+    const nowMs = () => (window.performance && performance.now) ? performance.now() : Date.now();
+    /* -------- 单位信息卡：桌面悬停 / 移动端长按（长按看信息、短按才行动） --------
+     * 手机上「点一下敌人」过去会同时触发 hover 信息卡 + click 选目标，两者抢同一次点击。
+     * 现在改为：桌面鼠标 = hover 看信息 + 点击行动；触摸 = 长按 450ms 看信息（并吞掉这次点击），短按照常行动。
+     */
+    function hideTip() { tip.style.display = 'none'; }
+    function showTip(uid, x, y, above) {
+      const info = uid ? UNIT_INFO[uid] : '';
+      if (!info) return false;
+      tip.innerHTML = info;
+      tip.style.display = 'block';
+      const r = tip.getBoundingClientRect();
+      const pad = 14;
+      let tx = x + pad, ty = above ? y - r.height - pad : y + pad;
+      if (tx + r.width > window.innerWidth - 8) tx = x - r.width - pad;
+      if (tx < 8) tx = 8;
+      if (ty + r.height > window.innerHeight - 8) ty = y - r.height - pad;
+      if (ty < 8) ty = 8;
+      tip.style.left = tx + 'px';
+      tip.style.top = ty + 'px';
+      return true;
+    }
+    // 触摸设备不绑定 hover 信息卡，避免手指一碰就弹卡抢掉「选目标」的点击
+    const finePointer = !!(window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches);
+    let lastTouchAt = -1e9;                     // 最近一次触摸时间：屏蔽触摸后浏览器补发的模拟鼠标事件
+    if (finePointer) {
+      board.addEventListener('mousemove', e => {
+        if (nowMs() - lastTouchAt < 1200) return;   // 刚触摸过 → 忽略模拟 mouse
+        const t = e.target.closest ? e.target.closest('.unit') : null;
+        if (!showTip(t && t.dataset.uid, e.clientX, e.clientY, false)) hideTip();
+      });
+      board.addEventListener('mouseleave', hideTip);
+    }
+
+    /* -------- 长按 = 查看信息 / 短按 = 行动 -------- */
+    const LONG_PRESS_MS = 450;      // 长按阈值
+    const MOVE_TOLERANCE = 12;      // 手指抖动容差：超出视为拖动/滚动，取消长按
+    let press = null;               // { timer, x, y, uid, fired }
+    let swallowClick = false;       // 长按已展示信息 → 吞掉紧随其后的 click，不当作攻击/移动
+
+    function cancelPress() {
+      if (press && press.timer) { clearTimeout(press.timer); press.timer = null; }
+      press = null;
+    }
+    board.addEventListener('pointerdown', e => {
+      swallowClick = false;                         // 新手势开始：清掉上一轮的吞点击标记
+      if (e.pointerType === 'mouse') return;        // 鼠标交给 hover + click
+      lastTouchAt = nowMs();
+      hideTip();
+      cancelPress();
+      const unitEl = e.target.closest ? e.target.closest('.unit') : null;
+      const p = { timer: null, x: e.clientX, y: e.clientY, uid: unitEl ? unitEl.dataset.uid : '', fired: false };
+      p.timer = setTimeout(() => {
+        p.fired = true;
+        // 手上没有单位信息（点在空地）就不吞点击，否则点地板移动会失灵
+        swallowClick = showTip(p.uid, p.x, p.y, true);
+        if (swallowClick && navigator.vibrate) { try { navigator.vibrate(12); } catch (err) {} }
+      }, LONG_PRESS_MS);
+      press = p;
+    });
+    board.addEventListener('pointermove', e => {
+      if (!press || press.fired) return;
+      if (Math.abs(e.clientX - press.x) > MOVE_TOLERANCE || Math.abs(e.clientY - press.y) > MOVE_TOLERANCE) cancelPress();
+    });
+    board.addEventListener('pointerup', cancelPress);
+    board.addEventListener('pointercancel', cancelPress);
+    board.addEventListener('pointerleave', e => { if (e.pointerType !== 'mouse') cancelPress(); });
+    // 移动端长按会弹系统菜单 / 选中 SVG 文字，需屏蔽
+    board.addEventListener('contextmenu', e => e.preventDefault());
+    // 点到棋盘以外的地方 → 收起信息卡
+    document.addEventListener('pointerdown', e => { if (!board.contains(e.target)) hideTip(); }, true);
+
+    board.addEventListener('click', e => {
+      if (swallowClick) { swallowClick = false; return; }   // 长按查看信息，不再当作短按行动
       const poly = e.target.closest('[data-col]');
       if (poly) onCellClick(+poly.dataset.col, +poly.dataset.row);
     });
-    // 单位悬停信息卡
-    const board = document.getElementById('board');
-    const tip = document.getElementById('unitTip');
-    board.addEventListener('mousemove', e => {
-      const t = e.target.closest ? e.target.closest('.unit-circle') : null;
-      const info = t && UNIT_INFO[t.dataset.uid];
-      if (info) {
-        tip.innerHTML = info;
-        tip.style.display = 'block';
-        const r = tip.getBoundingClientRect();
-        const pad = 16;
-        let x = e.clientX + pad, y = e.clientY + pad;
-        if (x + r.width > window.innerWidth - 8) x = e.clientX - r.width - pad;
-        if (y + r.height > window.innerHeight - 8) y = e.clientY - r.height - pad;
-        tip.style.left = x + 'px';
-        tip.style.top = y + 'px';
-      } else {
-        tip.style.display = 'none';
-      }
-    });
-    board.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
     document.getElementById('btnEnd').addEventListener('click', endPhase);
     document.getElementById('btnRest').addEventListener('click', () => {
       if (state.phase !== 'attack' || state.attackPlayed || state.rested || player.discard.length === 0) return;

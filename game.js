@@ -1289,10 +1289,14 @@
     document.getElementById('btnEnd').addEventListener('click', endPhase);
     document.getElementById('btnRest').addEventListener('click', () => {
       if (state.phase !== 'attack' || state.attackPlayed || state.rested || player.discard.length === 0) return;
-      player.hand = player.discard; player.discard = [];
+      // 休整（规则书 §4.2.2）：把弃牌堆所有卡牌拿回手中，与**现有手牌合并** → 恢复全部手牌。
+      // 注意：不能用 player.hand = player.discard 直接覆盖，那会把手上剩余的牌整批丢掉。
+      const recovered = player.discard.length;
+      player.hand = player.hand.concat(player.discard);
+      player.discard = [];
       // 休整与打招式卡只能二选一：休整后本阶段手牌全部锁住，收回的牌留到下个回合再用
       state.rested = true; state.selectedCard = null; state.catMode = false;
-      log('石友休整：收回全部招式（本阶段不能再打出招式卡）', 'hit');
+      log('石友休整：弃牌堆 ' + recovered + ' 张全部收回，手牌恢复至 ' + player.hand.length + ' 张（本阶段不能再打出招式卡）', 'hit');
       render();
       scheduleAttackAutoAdvance(900);
     });

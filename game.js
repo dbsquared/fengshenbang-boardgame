@@ -207,7 +207,7 @@
              pos: { col: pos.col, row: pos.row },
              move: 2, atk: 1, range: 1, alive: true, used: false, moveLeft: 2,
              // 灵兽卡 4P-11：生命 5；与玩家相邻时伤害 +1。
-             // 原型中仍暂列为非敌方目标（敌方不会主动攻击猫）。
+             // 规则书 §4.4 + 用户确认：灵兽同样是敌方目标，敌方会主动攻击通灵猫。
              hp: 5, maxHp: 5 };
   }
   // 可召唤的起始格：石友相邻、在界内、可行走、且没有任何单位占据
@@ -645,8 +645,8 @@
   /* ---------------- 敌方 AI ---------------- */
   async function enemyAct(e) {
     // 未触发剧情前姬昌在牢房里，不是合法目标。
-    // 注：规则书 §4.4 灵兽也是敌方目标，但通灵猫缺少灵兽卡生命值数据，原型暂不列为目标。
-    const targets = [player, jiChang]
+    // 规则书 §4.4 + 用户确认：灵兽（通灵猫）同样是敌方目标，会被主动攻击。
+    const targets = [player, jiChang, spiritCat]
       .filter(t => t && hpOf(t) > 0 && (t.alive !== false)
                     && (t !== jiChang || jiChang.found));
     if (!targets.length) return;
@@ -730,8 +730,13 @@
       } else if (rc) {
         log(e.name + '为远程攻击（射程 ' + e.range + '），【' + rc.name + '】只能挡近战，无法应对', 'bad');
       }
+    } else if (target === jiChang || target === spiritCat) {
+      // 用户明确：姬昌不能用石友的「格挡」；应对卡只保护石友本人。
+      if (player.hand.some(c => c.type === 'react')) {
+        log('【格挡】只能保护石友本人，' + target.name + '只能自行承受这次攻击', 'bad');
+      }
     }
-    const tgtUid = target === player ? 'p' : (target === jiChang ? 'ji' : '');
+    const tgtUid = target === player ? 'p' : (target === jiChang ? 'ji' : (target === spiritCat ? 'cat' : ''));
     const atkUid = 'm' + enemies.indexOf(e);
     await playAttack(atkUid, tgtUid, e.pos, target.pos, dmg);
     if (dmg <= 0) {
@@ -743,6 +748,13 @@
     log(e.name + '攻击' + target.name + '，造成' + dmg + '点伤害', 'bad');
     if (target === player) {
       if (player.panel.hp <= 0) { player.panel.hp = 0; player.alive = false; }
+    } else if (target === spiritCat) {
+      // 通灵猫生命归零：直接离场，且本局不能再召唤（琥珀串珠的召唤只生效一次）
+      if (spiritCat.hp <= 0) {
+        spiritCat.hp = 0; spiritCat.alive = false;
+        state.catMode = false; state.catSummon = false;
+        log('通灵猫被' + e.name + '击倒，从棋盘上消失；本局无法再次召唤', 'bad');
+      }
     } else if (target.hp <= 0) { target.hp = 0; }
   }
 
@@ -902,8 +914,8 @@
     player.panel.moveLeft = player.panel.move;
     player.panel.neiLeft = player.panel.nei;
     player.blockNext = false; state.busy = false; state.catMode = false; state.catSummon = false; state.feitui = null;
-    // 通灵猫每回合刷新移动力与行动标记
-    if (spiritCat) { spiritCat.moveLeft = spiritCat.move; spiritCat.used = false; }
+    // 通灵猫每回合刷新移动力与行动标记（已阵亡则跳过）
+    if (spiritCat && spiritCat.alive) { spiritCat.moveLeft = spiritCat.move; spiritCat.used = false; }
     render();
     showPhaseFx('move');
   }
@@ -1217,7 +1229,8 @@
       h += '<span class="tip-dim">无战斗力。走到他相邻格即触发剧情「找到姬昌」；之后石友相邻时点「护送姬昌」让他向最近的「卒」移动一格，抵达任意「卒」格即胜利。<br>注意：说明书 P22——若姬昌与玩家同时进入敌方射程，<b>敌方优先攻击姬昌</b>。</span>';
     } else if (cls === 'u-cat') {
       h += '<b>灵兽 · 通灵猫</b><br>';
-      h += '生命 ' + u.hp + '/' + u.maxHp + '（灵兽卡 4P-11；原型中敌方暂不攻击猫）<br>';
+      h += '生命 ' + u.hp + '/' + u.maxHp + '（灵兽卡 4P-11）<br>';
+      h += '<span class="tip-dim">规则书 §4.4：灵兽也是敌方的攻击目标，敌方会主动扑向通灵猫。生命归零即被击倒、本局无法再召唤。</span><br>';
       h += '移动 2 ／ 伤害 1（与玩家相邻则 +1，交互阶段可操作）<br>';
       h += '<span class="tip-dim">每交互阶段可移动合计 2 格并攻击一次；不能进入已被占据的格子</span>';
     }
@@ -1290,7 +1303,9 @@
       !(state.phase === 'attack' && !state.attackPlayed && !state.rested && player.discard.length > 0);
     const adjacent = hexDist(player.pos, jiChang.pos) === 1;
     document.getElementById('btnEscort').disabled = !(state.phase === 'interact' && adjacent && jiChang.hp > 0 && !state.jiMoved);
-    document.getElementById('btnCat').disabled = !(state.phase === 'interact' && (!spiritCat || !spiritCat.used));
+    // 通灵猫被击倒后不可再用（琥珀串珠的召唤本局只生效一次）：按钮只服务「未召唤」与「存活且本阶段未行动」
+    document.getElementById('btnCat').disabled =
+      !(state.phase === 'interact' && (!spiritCat || (spiritCat.alive && !spiritCat.used)));
     document.getElementById('btnEnd').disabled = state.busy || phaseLock || state.status !== 'playing';
   }
   function renderLog() {
@@ -1380,6 +1395,9 @@
     });
     document.getElementById('btnCat').addEventListener('click', () => {
       if (state.phase !== 'interact') return;
+      if (spiritCat && !spiritCat.alive) {
+        log('通灵猫已被击倒，本局无法再次召唤', 'bad'); render(); return;
+      }
       if (!spiritCat) {
         const spots = catSummonCells();
         if (!spots.length) { log('石友四周没有可放置通灵猫的空格，无法召唤', 'bad'); render(); return; }
@@ -1465,7 +1483,7 @@
     log('石友装备：生锈的长枪（枪）、布衣、琥珀串珠（灵猫）。', 'hit');
     log('属性按 §3.1.3 求和：武力2 / 内力1 / 灵力0 / 体力2 → 生命14 / 移动2。', 'hit');
     log('敌方：殷商步兵 HP5/攻3/移2/射程1 + 殷商弓兵 HP3/攻2/移1/射程3，会在卒格复活。', 'bad');
-    log('交互阶段可点「召灵猫」派出通灵猫：移动2格，可对相邻敌人造成1伤害。', 'hit');
+    log('交互阶段可点「召灵猫」派出通灵猫：移动2格，可对相邻敌人造成1伤害。灵猫也是敌方的攻击目标（§4.4）。', 'hit');
     bind();
     render();
   }

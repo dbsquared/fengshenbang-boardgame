@@ -19,7 +19,10 @@
   </header>
   <main>
     <section class="board-wrap">
-      <svg id="board" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div class="board-stage">
+        <svg id="board" xmlns="http://www.w3.org/2000/svg"></svg>
+        <div id="phaseFx" class="phase-fx" aria-hidden="true"></div>
+      </div>
       <div class="hint" id="hint">你从右侧 4 个「卒」格之一出发；选招式卡后点敌人出招；与姬昌相邻时可在「交互阶段」护送他回卒格；交互阶段可召通灵猫（移动2格/扑击1伤）。注意：姬昌只有 1 点生命，且敌方在他与玩家同时进入射程时会优先攻击他；小兵会在离你最近的卒格复活。</div>
     </section>
     <aside class="sidebar">

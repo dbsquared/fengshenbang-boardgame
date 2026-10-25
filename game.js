@@ -603,17 +603,50 @@
     checkEnd(); render();
   }
 
+  /* ---------------- 阶段切换动画（大地图覆盖层） ---------------- */
+  let phaseFxTimer = null;
+  let phaseLock = false;             // 阶段切换过渡锁（独立于 state.busy，避免与卡牌动画互相干扰）
+  function phaseSubtitle(phase) {
+    if (phase === 'move') return '第 ' + state.turn + ' 回合 · 可移动 ' + player.panel.moveLeft + ' 格';
+    if (phase === 'attack') return '打出招式卡 · 剩余内力 ' + player.panel.neiLeft;
+    if (phase === 'interact') return '灵兽 / 同伴行动';
+    if (phase === 'enemy') return '敌方行动牌库结算';
+    return '';
+  }
+  function showPhaseFx(phase, sub) {
+    const el = document.getElementById('phaseFx');
+    if (!el) return;
+    el.innerHTML =
+      '<div class="fx-band"></div>' +
+      '<div class="fx-text">' +
+        '<div class="fx-title">' + (PHASE_NAME[phase] || phase) + '</div>' +
+        '<div class="fx-sub">' + (sub || phaseSubtitle(phase)) + '</div>' +
+      '</div>';
+    el.classList.remove('show');
+    void el.offsetWidth;          // 强制回流，保证连续切换时动画能重新播放
+    el.classList.add('show');
+    clearTimeout(phaseFxTimer);
+    phaseFxTimer = setTimeout(() => el.classList.remove('show'), 1500);
+  }
+
   /* ---------------- 阶段推进 ---------------- */
-  function endPhase() {
-    if (state.busy || state.status !== 'playing') return;
+  async function endPhase() {
+    if (phaseLock || state.busy || state.status !== 'playing') return;
+    phaseLock = true;                // 防止连点「结束本阶段」一次跳过两个阶段
     if (state.phase === 'move') { state.phase = 'attack'; state.attackPlayed = false; state.selectedCard = null; }
     else if (state.phase === 'attack') { state.phase = 'interact'; state.selectedCard = null; }
     else if (state.phase === 'interact') {
       state.phase = 'enemy'; state.selectedCard = null; state.catMode = false;
       // 通灵猫：本阶段结束后不再强制收回，留在场上（用户反馈：不应回到石友身上）
+      render();
+      showPhaseFx('enemy');
+      await sleep(1000);             // 先让「敌方行动」切换动画演完，再结算
+      phaseLock = false;
       runEnemyPhase(); return;
     }
     render();
+    showPhaseFx(state.phase);
+    setTimeout(() => { phaseLock = false; render(); }, 350);
   }
   function startNewTurn() {
     state.turn += 1; state.phase = 'move';
@@ -623,6 +656,7 @@
     // 通灵猫每回合刷新移动力与行动标记
     if (spiritCat) { spiritCat.moveLeft = spiritCat.move; spiritCat.used = false; }
     render();
+    showPhaseFx('move');
   }
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   async function runEnemyPhase() {
@@ -704,8 +738,15 @@
       log('剧情·地牢深处：找到姬昌！他作为同伴加入行动（生命 ' + jiChang.maxHp +
           '，敌方在射程内会优先攻击他）', 'win');
     }
-    state.busy = false;
+    // 行动力用完：短暂停顿后自动进入下一阶段（出招）
+    const exhausted = state.phase === 'move' && player.panel.moveLeft <= 0 && state.status === 'playing';
+    state.busy = exhausted;          // 过渡期间锁输入，避免玩家再点一次「结束本阶段」
     render();
+    if (exhausted) {
+      await sleep(280);
+      state.busy = false;
+      await endPhase();
+    }
   }
 
   /* ---------------- 日志 ---------------- */
@@ -968,7 +1009,7 @@
     const adjacent = hexDist(player.pos, jiChang.pos) === 1;
     document.getElementById('btnEscort').disabled = !(state.phase === 'interact' && adjacent && jiChang.hp > 0);
     document.getElementById('btnCat').disabled = !(state.phase === 'interact' && (!spiritCat || !spiritCat.used));
-    document.getElementById('btnEnd').disabled = state.busy || state.status !== 'playing';
+    document.getElementById('btnEnd').disabled = state.busy || phaseLock || state.status !== 'playing';
   }
   function renderLog() {
     document.getElementById('log').innerHTML = state.log.map(l => '<p class="l ' + l.c + '">' + l.t + '</p>').join('');

@@ -224,16 +224,38 @@
     return out;
   }
 
+  // 召唤代价（用户明确）：每次召唤都让石友自减 5 点生命；生命不足 5 点时无法召唤（扣完必须还活着）
+  const SUMMON_HP_COST = 5;
+  function canAffordSummon() { return player.alive && player.panel.hp > SUMMON_HP_COST; }
+
   // 在指定起始格召唤通灵猫
   function summonCatAt(c) {
     if (!catSummonCells().some(s => eq(s, c))) return false;
+    if (!canAffordSummon()) {
+      state.catSummon = false;
+      log('生命不足：召唤通灵猫需自减 ' + SUMMON_HP_COST + ' 点生命（当前 ' + player.panel.hp + '）', 'bad');
+      render(); return false;
+    }
+    const resummon = !!(spiritCat && !spiritCat.alive);   // 灵猫被击倒后重新召唤
+    const hpBefore = player.panel.hp;
+    player.panel.hp -= SUMMON_HP_COST;
     spiritCat = makeSpiritCat(c);
     state.catSummon = false;
     state.catMode = true;                 // 召唤后直接进入操控，可继续移动 / 攻击
-    log('琥珀串珠激活：通灵猫现身于 (' + c.col + ',' + c.row + ')，每阶段可移动合计 2 格并攻击一次', 'win');
+    log((resummon ? '再次召唤' : '琥珀串珠激活') + '：通灵猫现身于 (' + c.col + ',' + c.row +
+        ')，石友生命 ' + hpBefore + ' → ' + player.panel.hp + '（代价 ' + SUMMON_HP_COST + ' 点）', resummon ? 'hit' : 'win');
+    log('通灵猫生命 ' + spiritCat.hp + '/' + spiritCat.maxHp + '；每阶段可移动合计 2 格并攻击一次', 'hit');
     render();                             // 先重绘（render 会重建 SVG），再飘字
     floatText(c, '通灵猫', '#8fd6ff');
+    floatText(player.pos, '-' + SUMMON_HP_COST, '#ff8a8a');
     return true;
+  }
+  // 「召灵猫」按钮是否可用：交互阶段 +（灵猫不在场/已阵亡 → 付得起代价且有落点；存活 → 本阶段还没行动）
+  function canSummonCat() {
+    if (state.phase !== 'interact' || state.status !== 'playing' || state.busy || phaseLock) return false;
+    const down = !spiritCat || !spiritCat.alive;
+    if (down) return canAffordSummon() && catSummonCells().length > 0;
+    return !spiritCat.used;
   }
 
   /* ---------------- 单位 ---------------- */
@@ -753,7 +775,7 @@
       if (spiritCat.hp <= 0) {
         spiritCat.hp = 0; spiritCat.alive = false;
         state.catMode = false; state.catSummon = false;
-        log('通灵猫被' + e.name + '击倒，从棋盘上消失；本局无法再次召唤', 'bad');
+        log('通灵猫被' + e.name + '击倒，从棋盘上消失（可再次召唤，需再自减 ' + SUMMON_HP_COST + ' 点生命）', 'bad');
       }
     } else if (target.hp <= 0) { target.hp = 0; }
   }
@@ -1217,7 +1239,7 @@
       h += '武力 ' + p.wu + ' ／ 内力 ' + p.nei + ' ／ 灵力 ' + p.ling + ' ／ 体力 ' + p.ti + '<br>';
       h += '移动 ' + p.move + ' ／ 剩余移动 ' + p.moveLeft + ' ／ 剩余内力 ' + p.neiLeft + '<br>';
       h += '装备：' + u.equipment.map(e => e.name).join('、') + '<br>';
-      h += '<span class="tip-dim">琥珀串珠可召灵兽·通灵猫（交互阶段）</span>';
+      h += '<span class="tip-dim">琥珀串珠可召灵兽·通灵猫（交互阶段；每次召唤石友自减 5 点生命，灵猫阵亡后可重召）</span>';
     } else if (cls === 'u-minion') {
       h += '<b>' + u.name + '</b>（敌方）<br>';
       h += '生命 ' + u.hp + '/' + u.maxHp + '<br>';
@@ -1232,7 +1254,7 @@
     } else if (cls === 'u-cat') {
       h += '<b>灵兽 · 通灵猫</b><br>';
       h += '生命 ' + u.hp + '/' + u.maxHp + '（灵兽卡 4P-11）<br>';
-      h += '<span class="tip-dim">规则书 §4.4：灵兽也是敌方的攻击目标，敌方会主动扑向通灵猫。生命归零即被击倒、本局无法再召唤。</span><br>';
+      h += '<span class="tip-dim">规则书 §4.4：灵兽也是敌方的攻击目标，敌方会主动扑向通灵猫。生命归零即被击倒、离场，但<b>可以再次召唤</b>（每次召唤都需石友自减 5 点生命）。</span><br>';
       h += '移动 2 ／ 伤害 1（与玩家相邻则 +1，交互阶段可操作）<br>';
       h += '<span class="tip-dim">每交互阶段可移动合计 2 格并攻击一次；不能进入已被占据的格子</span>';
     }
@@ -1305,9 +1327,7 @@
       !(state.phase === 'attack' && !state.attackPlayed && !state.rested && player.discard.length > 0);
     const adjacent = hexDist(player.pos, jiChang.pos) === 1;
     document.getElementById('btnEscort').disabled = !(state.phase === 'interact' && adjacent && jiChang.hp > 0 && !state.jiMoved);
-    // 通灵猫被击倒后不可再用（琥珀串珠的召唤本局只生效一次）：按钮只服务「未召唤」与「存活且本阶段未行动」
-    document.getElementById('btnCat').disabled =
-      !(state.phase === 'interact' && (!spiritCat || (spiritCat.alive && !spiritCat.used)));
+    document.getElementById('btnCat').disabled = !canSummonCat();
     document.getElementById('btnEnd').disabled = state.busy || phaseLock || state.status !== 'playing';
   }
   function renderLog() {
@@ -1451,14 +1471,17 @@
     });
     document.getElementById('btnCat').addEventListener('click', () => {
       if (state.phase !== 'interact') return;
-      if (spiritCat && !spiritCat.alive) {
-        log('通灵猫已被击倒，本局无法再次召唤', 'bad'); render(); return;
-      }
-      if (!spiritCat) {
+      const down = !spiritCat || !spiritCat.alive;
+      if (down) {
+        if (!canAffordSummon()) {
+          log('生命不足：召唤通灵猫需自减 ' + SUMMON_HP_COST + ' 点生命（当前 ' + player.panel.hp + '）', 'bad');
+          render(); return;
+        }
         const spots = catSummonCells();
         if (!spots.length) { log('石友四周没有可放置通灵猫的空格，无法召唤', 'bad'); render(); return; }
         state.catSummon = true; state.catMode = false;
-        log('选择通灵猫的起始点：点击石友相邻的高亮空格（共 ' + spots.length + ' 个可选）', 'hit');
+        log('选择通灵猫的起始点：点击石友相邻的高亮空格（共 ' + spots.length + ' 个可选；召唤将自减 ' +
+            SUMMON_HP_COST + ' 点生命）', 'hit');
       } else if (!spiritCat.used) {
         state.catMode = !state.catMode;
         log(state.catMode ? '切换至通灵猫操控' : '结束通灵猫操控', 'hit');
@@ -1539,7 +1562,7 @@
     log('石友装备：生锈的长枪（枪）、布衣、琥珀串珠（灵猫）。', 'hit');
     log('属性按 §3.1.3 求和：武力2 / 内力1 / 灵力0 / 体力2 → 生命14 / 移动2。', 'hit');
     log('敌方：殷商步兵 HP5/攻3/移2/射程1 + 殷商弓兵 HP3/攻2/移1/射程3，会在卒格复活。', 'bad');
-    log('交互阶段可点「召灵猫」派出通灵猫：移动2格，可对相邻敌人造成1伤害。灵猫也是敌方的攻击目标（§4.4）。', 'hit');
+    log('交互阶段可点「召灵猫」派出通灵猫：移动2格、对相邻敌人造成1伤害；每次召唤石友自减 5 点生命，灵猫阵亡后可重召。灵猫也是敌方的攻击目标（§4.4）。', 'hit');
     bind();
     render();
   }

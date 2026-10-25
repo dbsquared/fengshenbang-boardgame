@@ -962,8 +962,9 @@
     });
   }
   function renderButtons() {
+    // 休整（规则书 §4.2.2）：出招阶段且本阶段未打出任何招式卡，即可收回弃牌堆；不要求手牌为空
     document.getElementById('btnRest').disabled =
-      !(state.phase === 'attack' && !state.attackPlayed && player.discard.length > 0 && player.hand.length === 0);
+      !(state.phase === 'attack' && !state.attackPlayed && player.discard.length > 0);
     const adjacent = hexDist(player.pos, jiChang.pos) === 1;
     document.getElementById('btnEscort').disabled = !(state.phase === 'interact' && adjacent && jiChang.hp > 0);
     document.getElementById('btnCat').disabled = !(state.phase === 'interact' && (!spiritCat || !spiritCat.used));
@@ -1039,7 +1040,7 @@
     board.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
     document.getElementById('btnEnd').addEventListener('click', endPhase);
     document.getElementById('btnRest').addEventListener('click', () => {
-      if (state.phase !== 'attack' || state.attackPlayed || player.hand.length > 0) return;
+      if (state.phase !== 'attack' || state.attackPlayed || player.discard.length === 0) return;
       player.hand = player.discard; player.discard = [];
       log('石友休整：收回全部招式', 'hit');
       state.attackPlayed = true; render();

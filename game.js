@@ -320,6 +320,7 @@
   const state = {
     phase: 'move', turn: 1, status: 'playing', msg: '', busy: false,
     selectedCard: null, attackPlayed: false, rested: false, catMode: false, catSummon: false, catStep: 0,
+    feitui: null,   // 位移类招式（飞踢/回马枪）的两阶段流程：{ stage:'move'|'target', card }
     reachSet: new Set(), tgtSet: new Set(), log: [],
   };
   const PHASE_NAME = { move: '移动阶段', attack: '出招阶段', interact: '交互阶段', enemy: '敌方行动' };
@@ -407,31 +408,87 @@
     return true;
   }
   function enemiesInRange(range) { return enemies.filter(e => e.alive && hexDist(player.pos, e.pos) <= range); }
-  /* 位移类招式（飞踢 / 回马枪）：卡面「移动1格并造成伤害」，移动在前。
-   * 因此这类招式可以打「距离 range+1」的敌人——先走 1 格贴近，再结算伤害。
-   * 返回：null = 已贴身无需移动；{col,row} = 需要先移动到的格子；undefined = 走一步也够不到。
-   */
-  function selfMoveStep(card, en) {
-    if (!en || !en.alive) return undefined;
-    if (hexDist(player.pos, en.pos) <= card.range) return null;
-    const p = pathTo(player.pos, en.pos, true);
-    if (!p || !p.length) return undefined;
-    const s = p[0];
-    if (isOccupied(s)) return undefined;
-    if (hexDist(s, en.pos) > card.range) return undefined;   // 走一步仍不在射程内
-    return s;
-  }
-  // 招式当前真正可以打到的敌人（位移类招式含「移动后可达」的目标）
-  function attackTargets(card) {
-    return enemies.filter(e => {
-      if (!e.alive) return false;
-      if (hexDist(player.pos, e.pos) <= card.range) return true;
-      return !!card.selfMove && !!selfMoveStep(card, e);
-    });
-  }
+  // 招式当前可指定的目标（用于攻击卡点选与高亮）
+  function attackTargets(card) { return enemiesInRange(card.range); }
   function isTargetable(en) {
     if (!state.selectedCard || state.selectedCard.type !== 'attack') return false;
     return attackTargets(state.selectedCard).includes(en);
+  }
+
+  /* -------- 位移类招式（飞踢 / 回马枪）：玩家自选 1 格移动，落点旁才结算伤害 --------
+   * 用户明确：①即使没有可攻击目标，也能靠它移动 1 格；②移动位置必须由玩家选择。
+   */
+  // 可作为落点的相邻格：在界内、可行走、无任何单位占据
+  function feituiMoveCells() {
+    const out = [];
+    if (!player.alive) return out;
+    for (const nb of neighbors(player.pos)) {
+      if (!inBounds(nb)) continue;
+      const cl = cellAt(nb);
+      if (!cl || cl.type === 'wall' || cl.type === 'rock') continue;
+      if (isOccupied(nb)) continue;
+      out.push(nb);
+    }
+    return out;
+  }
+  // 当前站位下、招式射程内的敌人（落点结算时按新位置再算一次）
+  function feituiAdjacentEnemies(card) {
+    return enemies.filter(e => e.alive && hexDist(player.pos, e.pos) <= card.range);
+  }
+  // 位移类招式流程 · 点击棋盘
+  function feituiClick(c) {
+    const f = state.feitui;
+    if (!f) return;
+    if (f.stage === 'move') { feituiStep(c); return; }
+    if (f.stage === 'target') {
+      const en = enemyAt(c);
+      if (en && en.alive && hexDist(player.pos, en.pos) <= f.card.range) { finishFeitui(en); return; }
+      log('请点击高亮的相邻敌人（或点「结束本阶段」放弃这一击）', 'bad');
+    }
+  }
+  // 第一阶段：移动到玩家选定的落点，落地即结算内力与出牌
+  async function feituiStep(c) {
+    const f = state.feitui;
+    if (!f || f.stage !== 'move') return;
+    if (!feituiMoveCells().some(s => eq(s, c))) {
+      log('只能移动到高亮格（石友相邻、无人占据）', 'bad'); render(); return;
+    }
+    state.busy = true;
+    const from = { col: player.pos.col, row: player.pos.row };
+    player.pos = { col: c.col, row: c.row };
+    player.panel.neiLeft -= cardCost(f.card);
+    const hi = player.hand.indexOf(f.card); if (hi >= 0) player.hand.splice(hi, 1);
+    player.discard.push(f.card);
+    state.attackPlayed = true; state.selectedCard = null;
+    log('石友以「' + f.card.name + '」移动 1 格至 (' + c.col + ',' + c.row + ')', 'hit');
+    await animateMove('p', from, player.pos);
+    const adj = feituiAdjacentEnemies(f.card);
+    if (adj.length === 0) {
+      log('落点旁没有敌人，「' + f.card.name + '」只完成移动、未造成伤害', 'bad');
+      finishFeitui(null); return;
+    }
+    if (adj.length === 1) { finishFeitui(adj[0]); return; }
+    // 多个相邻敌人：让玩家点选其中一个
+    f.stage = 'target';
+    state.busy = false;
+    log('落点旁有 ' + adj.length + ' 个敌人，点击高亮敌人决定「' + f.card.name + '」的目标', 'hit');
+    render();
+  }
+  // 第二阶段：结算伤害（target 为 null 表示只移动、不伤害）
+  async function finishFeitui(target) {
+    const f = state.feitui; if (!f) return;
+    state.feitui = null;
+    state.busy = true;
+    if (target) {
+      const dmg = cardDmg(f.card);
+      await playAttack('p', 'm' + enemies.indexOf(target), player.pos, target.pos, dmg);
+      target.hp -= dmg;
+      log('石友以「' + f.card.name + '」对' + target.name + '造成' + dmg + '点伤害', 'hit');
+      checkDeaths();
+    }
+    state.busy = false;
+    checkEnd(); render();
+    scheduleAttackAutoAdvance(900);
   }
   async function playCard(card, targetEnemy) {
     if (!player.hand.includes(card)) return;   // 防止重复点击已打出的卡再次结算
@@ -459,20 +516,20 @@
       if (healed > 0) await floatText(player.pos, '+' + healed, '#7CFC8C');
       render(); scheduleAttackAutoAdvance(850); return;
     }
-    // 攻击：先处理「移动」位移（飞踢 / 回马枪），再播放演出并结算伤害（不改动任何规则数值）
+    // 位移类招式（飞踢 / 回马枪）：立即结算改为「玩家先选落点」的两阶段流程
+    if (card.selfMove) {
+      if (!feituiMoveCells().length) {
+        log('四周没有可移动的空格，无法施展「' + card.name + '」', 'bad'); render(); return;
+      }
+      state.feitui = { stage: 'move', card: card };
+      state.selectedCard = null;
+      log('「' + card.name + '」：点击高亮格选择移动落点（落点旁有敌人即可造成伤害）', 'hit');
+      render(); return;
+    }
+    // 攻击：播放演出并结算伤害（不改动任何规则数值）
     state.busy = true;
     player.panel.neiLeft -= cost;
     const dmg = cardDmg(card);
-    // 位移类招式：先朝目标移动 1 格（卡面顺序是「移动1格并造成伤害」）
-    if (card.selfMove && targetEnemy) {
-      const step = selfMoveStep(card, targetEnemy);
-      if (step) {
-        const from = { col: player.pos.col, row: player.pos.row };
-        player.pos = { col: step.col, row: step.row };
-        log('石友以「' + card.name + '」向前移动 1 格至 (' + step.col + ',' + step.row + ')', 'hit');
-        await animateMove('p', from, player.pos);
-      }
-    }
     const hits = card.aoe ? enemiesInRange(card.range)
       : (targetEnemy && hexDist(player.pos, targetEnemy.pos) <= card.range ? [targetEnemy] : []);
     if (hits.length === 0) log('「' + card.name + '」未命中目标', 'bad');
@@ -482,7 +539,6 @@
       en.hp -= dmg;
       log('石友以「' + card.name + '」对' + en.name + '造成' + dmg + '点伤害', 'hit');
     }
-    // （位移类招式的「移动 1 格」已在攻击结算前处理，此处不再重复移动）
     // 击退：推到「玩家→敌人」延长线上的下一格（轴向 cube 坐标求直线方向，不绕障碍）；
     // 目标格不可移动（墙/岩石/被占/越界）则不推。
     if (card.push && targetEnemy && hits.length) {
@@ -783,7 +839,9 @@
     if (state.rested) return false;                   // 本阶段已休整：不能再打出任何招式卡
     if (card.type === 'react') return false;          // 应对卡只等遭受近战攻击时提示
     if (!canPlay(card)) return false;                 // 内力不足 / 武器不符
-    // 攻击卡必须有可打目标（位移类招式含「先移动 1 格后可达」的目标）
+    // 位移类招式（飞踢/回马枪）：只要有可站的相邻格就能打出，**不要求有敌人**
+    if (card.selfMove) return feituiMoveCells().length > 0;
+    // 攻击卡必须有可打目标
     if (card.type === 'attack') return attackTargets(card).length > 0;
     return true;                                      // 无目标卡（调息等）
   }
@@ -816,6 +874,13 @@
     if (phaseLock || state.busy || state.status !== 'playing') return;
     phaseLock = true;                // 防止连点「结束本阶段」一次跳过两个阶段
     stopAttackAutoAdvance();         // 手动结束时取消待触发的自动跳阶段，避免多跳一格
+    // 位移类招式流程未走完：结束阶段即取消（选落点阶段卡还在手上，不消耗；选目标阶段卡已结算）
+    if (state.feitui) {
+      log(state.feitui.stage === 'move'
+        ? '已取消「' + state.feitui.card.name + '」'
+        : '已放弃「' + state.feitui.card.name + '」这一击', 'bad');
+      state.feitui = null;
+    }
     if (state.phase === 'move') { state.phase = 'attack'; state.attackPlayed = false; state.rested = false; state.selectedCard = null; }
     else if (state.phase === 'attack') { state.phase = 'interact'; state.selectedCard = null; }
     else if (state.phase === 'interact') {
@@ -839,7 +904,7 @@
     state.rested = false; state.attackPlayed = false;
     player.panel.moveLeft = player.panel.move;
     player.panel.neiLeft = player.panel.nei;
-    player.blockNext = false; state.busy = false; state.catMode = false; state.catSummon = false;
+    player.blockNext = false; state.busy = false; state.catMode = false; state.catSummon = false; state.feitui = null;
     // 通灵猫每回合刷新移动力与行动标记
     if (spiritCat) { spiritCat.moveLeft = spiritCat.move; spiritCat.used = false; }
     render();
@@ -886,7 +951,10 @@
 
   /* ---------------- 交互：点击格子 ---------------- */
   function onCellClick(col, row) {
-    if (state.busy || state.status !== 'playing') return;
+    if (state.status !== 'playing') return;
+    // 位移类招式（飞踢/回马枪）的选落点 / 选目标优先处理
+    if (state.feitui) { if (!state.busy) feituiClick({ col: col, row: row }); return; }
+    if (state.busy) return;
     const c = { col, row };
     if (state.phase === 'move') { if (isReachable(col, row)) stepMove(c); }
     else if (state.phase === 'attack') {
@@ -1042,9 +1110,17 @@
 
     UNIT_INFO = {};
     state.reachSet = computeReach();
+    // 飞踢/回马枪选落点：把可站立的相邻格并入高亮（借用「可走格」样式，绿色）
+    if (state.feitui && state.feitui.stage === 'move') {
+      feituiMoveCells().forEach(c => state.reachSet.add(key(c)));
+    }
     state.tgtSet = new Set();
     if (state.phase === 'attack' && state.selectedCard && state.selectedCard.type === 'attack') {
       attackTargets(state.selectedCard).forEach(e => state.tgtSet.add(key(e.pos)));
+    }
+    // 飞踢第二阶段：高亮落点旁的敌人供点选
+    if (state.feitui && state.feitui.stage === 'target') {
+      feituiAdjacentEnemies(state.feitui.card).forEach(e => state.tgtSet.add(key(e.pos)));
     }
 
     // 召唤选址：高亮石友相邻的可用空格
@@ -1202,6 +1278,8 @@
         if (card.type === 'react') { playCard(card, null); return; }
         // 无目标卡（调息等）：点击即结算，不需要再点棋盘选目标
         if (card.type === 'heal') { playCard(card, null); return; }
+        // 位移类招式（飞踢/回马枪）：点击后进入「自选移动落点」流程，不需要先选敌人
+        if (card.selfMove) { playCard(card, null); return; }
         // 攻击卡：先选中，再点棋盘上的敌人作为目标
         state.selectedCard = (state.selectedCard === card) ? null : card;
         render();
@@ -1379,13 +1457,13 @@
     phaseLock = false;
     freshState(); resetActionDeck();
     state.phase = 'move'; state.turn = 1; state.status = 'playing'; state.msg = '';
-    state.selectedCard = null; state.attackPlayed = false; state.rested = false; state.busy = false; state.catMode = false; state.catSummon = false; state.log = [];
+    state.selectedCard = null; state.attackPlayed = false; state.rested = false; state.busy = false; state.catMode = false; state.catSummon = false; state.feitui = null; state.log = [];
     render();
   }
   function init() {
     freshState(); resetActionDeck();
     state.phase = 'move'; state.turn = 1; state.status = 'playing'; state.msg = '';
-    state.selectedCard = null; state.attackPlayed = false; state.rested = false; state.busy = false; state.catMode = false; state.catSummon = false; state.log = [];
+    state.selectedCard = null; state.attackPlayed = false; state.rested = false; state.busy = false; state.catMode = false; state.catSummon = false; state.feitui = null; state.log = [];
     log('【第一章·地牢】护送姬昌回到任意玩家起点（卒）即胜利。', 'win');
     log('石友装备：生锈的长枪（枪）、布衣、琥珀串珠（灵猫）。', 'hit');
     log('属性按 §3.1.3 求和：武力2 / 内力1 / 灵力0 / 体力2 → 生命14 / 移动2。', 'hit');

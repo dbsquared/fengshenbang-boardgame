@@ -455,6 +455,14 @@
     spiritCat.used = true; state.catMode = false;
     state.busy = false;
     checkDeaths(); checkEnd(); render();
+    // 通灵猫行动结束（攻击已用）：若没有可执行的同伴行动（护送姬昌），自动进入敌方行动阶段
+    if (state.status === 'playing' && !canEscortNow()) {
+      state.busy = true; render();
+      await sleep(260);
+      state.busy = false;
+      log('通灵猫行动结束，自动进入敌方行动阶段', 'hit');
+      await endPhase();
+    }
   }
   async function stepCat(toC) {
     if (!spiritCat || state.busy) return;
@@ -601,6 +609,11 @@
       if (moved) log('姬昌向起点（卒）移动 ' + moved + ' 格', 'hit');
     } else log('姬昌无路可走', 'bad');
     checkEnd(); render();
+  }
+  // 交互阶段是否还有可执行的「同伴行动」（护送姬昌）
+  function canEscortNow() {
+    return state.status === 'playing' && jiChang.found && jiChang.hp > 0 &&
+           hexDist(player.pos, jiChang.pos) === 1;
   }
 
   /* ---------------- 阶段切换动画（大地图覆盖层） ---------------- */

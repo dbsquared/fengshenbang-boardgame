@@ -81,6 +81,8 @@ main{display:grid;grid-template-columns:1fr 360px;gap:20px;align-items:start}
 .sub b{color:var(--ink)}
 
 .hand{display:flex;flex-wrap:wrap;gap:8px}
+.hand-hint{margin-top:8px;font-size:12px;line-height:1.5;color:var(--gold)}
+.hand-hint:empty{display:none}
 .card{width:74px;min-height:96px;background:linear-gradient(180deg,#efe4cb,#d9c9a6);color:#2a2118;
   border-radius:10px;padding:7px 6px;border:1px solid #b09a6a;cursor:pointer;position:relative;
   box-shadow:0 3px 8px rgba(0,0,0,.4);transition:transform .12s,border-color .12s;font-family:inherit}

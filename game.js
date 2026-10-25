@@ -387,7 +387,7 @@
       log('石友调息：生命 +' + healed + '，内力 ' + neiBefore + ' → ' + player.panel.neiLeft, 'hit');
       checkEnd();
       if (healed > 0) await floatText(player.pos, '+' + healed, '#7CFC8C');
-      render(); return;
+      render(); scheduleAttackAutoAdvance(850); return;
     }
     // 攻击：先播放演出，再结算伤害（不改动任何规则数值）
     state.busy = true;
@@ -437,6 +437,7 @@
     state.attackPlayed = true; state.selectedCard = null;
     state.busy = false;
     checkDeaths(); checkEnd(); render();
+    scheduleAttackAutoAdvance(900);
   }
 
   /* ---------------- 通灵猫行动 ---------------- */
@@ -690,10 +691,46 @@
     phaseFxTimer = setTimeout(() => el.classList.remove('show'), 1500);
   }
 
+  /* -------- 出招阶段：没有任何可执行行动时，自动进入下一阶段 -------- */
+  let autoAdvanceTimer = null;
+  function stopAttackAutoAdvance() {
+    if (autoAdvanceTimer) { clearTimeout(autoAdvanceTimer); autoAdvanceTimer = null; }
+  }
+  // 这张卡此刻是否真能打出去（纯判断，不改任何数值）
+  function playableNow(card) {
+    if (card.type === 'react') return false;          // 应对卡只等敌方攻击时提示
+    if (!canPlay(card)) return false;                 // 内力不足 / 武器不符
+    if (card.type === 'attack') return enemiesInRange(card.range).length > 0;   // 必须有可打目标
+    return true;                                      // 无目标卡（调息等）
+  }
+  // 出招阶段是否还有玩家可做的事：能打牌 或 能休整（规则书 §4.2 不限次数，只看条件和内力）
+  function attackHasOptions() {
+    if (state.status !== 'playing' || state.phase !== 'attack') return false;
+    if (player.hand.some(playableNow)) return true;
+    if (!state.attackPlayed && player.discard.length > 0) return true;   // 休整
+    return false;
+  }
+  function scheduleAttackAutoAdvance(delay) {
+    stopAttackAutoAdvance();
+    if (state.phase !== 'attack' || state.status !== 'playing') return;
+    if (attackHasOptions()) return;
+    autoAdvanceTimer = setTimeout(tryAttackAutoAdvance, delay === undefined ? 800 : delay);
+  }
+  function tryAttackAutoAdvance() {
+    autoAdvanceTimer = null;
+    if (state.phase !== 'attack' || state.status !== 'playing') return;
+    // 动画/切换锁未释放时稍后重试，不要强行打断
+    if (state.busy || phaseLock) { autoAdvanceTimer = setTimeout(tryAttackAutoAdvance, 320); return; }
+    if (attackHasOptions()) return;
+    log('出招阶段已无可执行行动，自动进入交互阶段', 'hit');
+    endPhase();
+  }
+
   /* ---------------- 阶段推进 ---------------- */
   async function endPhase() {
     if (phaseLock || state.busy || state.status !== 'playing') return;
     phaseLock = true;                // 防止连点「结束本阶段」一次跳过两个阶段
+    stopAttackAutoAdvance();         // 手动结束时取消待触发的自动跳阶段，避免多跳一格
     if (state.phase === 'move') { state.phase = 'attack'; state.attackPlayed = false; state.selectedCard = null; }
     else if (state.phase === 'attack') { state.phase = 'interact'; state.selectedCard = null; }
     else if (state.phase === 'interact') {
@@ -708,8 +745,11 @@
     render();
     showPhaseFx(state.phase);
     setTimeout(() => { phaseLock = false; render(); }, 350);
+    // 刚进入出招阶段就无牌可打、也无牌可收：等切换动画演个开场，再自动跳到交互阶段
+    if (state.phase === 'attack') scheduleAttackAutoAdvance(1150);
   }
   function startNewTurn() {
+    stopAttackAutoAdvance();         // 新回合开始，清掉上一阶段残留的自动跳转
     state.turn += 1; state.phase = 'move';
     player.panel.moveLeft = player.panel.move;
     player.panel.neiLeft = player.panel.nei;
@@ -1152,6 +1192,7 @@
       player.hand = player.discard; player.discard = [];
       log('石友休整：收回全部招式', 'hit');
       state.attackPlayed = true; render();
+      scheduleAttackAutoAdvance(800);
     });
     document.getElementById('btnEscort').addEventListener('click', () => {
       if (state.phase === 'interact' && hexDist(player.pos, jiChang.pos) === 1) stepJiChang();
@@ -1227,6 +1268,8 @@
 
   /* ---------------- 启动 ---------------- */
   function restart() {
+    stopAttackAutoAdvance();
+    phaseLock = false;
     freshState(); resetActionDeck();
     state.phase = 'move'; state.turn = 1; state.status = 'playing'; state.msg = '';
     state.selectedCard = null; state.attackPlayed = false; state.busy = false; state.catMode = false; state.log = [];

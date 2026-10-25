@@ -201,13 +201,39 @@
 
   /* ---------------- 灵兽：通灵猫（琥珀串珠·特殊技能） ---------------- */
   // 移动2格 + 对相邻敌人造成1伤害。交互阶段可派出；每交互阶段可移动合计2格并攻击一次，阶段结束保留在场上。
-  function makeSpiritCat() {
+  // 召唤时由玩家指定起始点：必须是石友相邻、可站立且无人占据的格子（用户明确规则）
+  function makeSpiritCat(pos) {
     return { id: 'cat', name: '通灵猫', char: '貓', kind: 'spirit', isSpirit: true,
-             pos: { col: player.pos.col, row: player.pos.row },
+             pos: { col: pos.col, row: pos.row },
              move: 2, atk: 1, range: 1, alive: true, used: false, moveLeft: 2,
              // 灵兽卡 4P-11：生命 5；与玩家相邻时伤害 +1。
              // 原型中仍暂列为非敌方目标（敌方不会主动攻击猫）。
              hp: 5, maxHp: 5 };
+  }
+  // 可召唤的起始格：石友相邻、在界内、可行走、且没有任何单位占据
+  function catSummonCells() {
+    const out = [];
+    if (!player.alive) return out;
+    for (const nb of neighbors(player.pos)) {
+      if (!inBounds(nb)) continue;
+      const cl = cellAt(nb);
+      if (!cl || cl.type === 'wall' || cl.type === 'rock') continue;
+      if (isOccupied(nb)) continue;
+      out.push(nb);
+    }
+    return out;
+  }
+
+  // 在指定起始格召唤通灵猫
+  function summonCatAt(c) {
+    if (!catSummonCells().some(s => eq(s, c))) return false;
+    spiritCat = makeSpiritCat(c);
+    state.catSummon = false;
+    state.catMode = true;                 // 召唤后直接进入操控，可继续移动 / 攻击
+    log('琥珀串珠激活：通灵猫现身于 (' + c.col + ',' + c.row + ')，每阶段可移动合计 2 格并攻击一次', 'win');
+    render();                             // 先重绘（render 会重建 SVG），再飘字
+    floatText(c, '通灵猫', '#8fd6ff');
+    return true;
   }
 
   /* ---------------- 单位 ---------------- */
@@ -293,7 +319,7 @@
   /* ---------------- 全局状态 ---------------- */
   const state = {
     phase: 'move', turn: 1, status: 'playing', msg: '', busy: false,
-    selectedCard: null, attackPlayed: false, rested: false, catMode: false, catStep: 0,
+    selectedCard: null, attackPlayed: false, rested: false, catMode: false, catSummon: false, catStep: 0,
     reachSet: new Set(), tgtSet: new Set(), log: [],
   };
   const PHASE_NAME = { move: '移动阶段', attack: '出招阶段', interact: '交互阶段', enemy: '敌方行动' };
@@ -303,6 +329,17 @@
     if (player.alive && eq(player.pos, c)) return true;
     if (jiChang.hp > 0 && eq(jiChang.pos, c)) return true;
     for (const e of enemies) if (e.alive && eq(e.pos, c)) return true;
+    if (spiritCat && spiritCat.alive && eq(spiritCat.pos, c)) return true;
+    return false;
+  }
+  // 敌方单位（含障碍物意义的敌兵）：不可穿越、不可停留（规则书 §4.1）
+  function isEnemyOccupied(c) {
+    for (const e of enemies) if (e.alive && eq(e.pos, c)) return true;
+    return false;
+  }
+  // 我方单位（姬昌 / 通灵猫）：可以穿越，但不能同时占据同一格（规则书 §4.1）
+  function isFriendlyOccupied(c) {
+    if (jiChang.hp > 0 && eq(jiChang.pos, c)) return true;
     if (spiritCat && spiritCat.alive && eq(spiritCat.pos, c)) return true;
     return false;
   }
@@ -323,17 +360,25 @@
         if (!inBounds(nb)) continue;
         const cl = cellAt(nb);
         if (!cl || cl.type === 'wall' || cl.type === 'rock') continue;
-        if (isOccupied(nb)) continue;
+        // 敌方单位视为障碍物，不可穿越
+        if (isEnemyOccupied(nb)) continue;
         const k = key(nb);
-        if (dist[k] === undefined) { dist[k] = d + 1; reach.add(k); q.push(nb); }
+        if (dist[k] !== undefined) continue;
+        dist[k] = d + 1;
+        // 我方单位所在格可以穿过（继续向更远处扩展），但不能作为落点
+        if (!isFriendlyOccupied(nb)) reach.add(k);
+        q.push(nb);
       }
     }
     return reach;
   }
   function isReachable(col, row) { return state.reachSet.has(col + ',' + row); }
 
-  /* ---------------- 路径 (BFS) ---------------- */
-  function pathTo(from, target) {
+  /* ---------------- 路径 (BFS) ----------------
+   * passFriendly=true 时按玩家/灵兽移动规则：敌方单位视为障碍，我方单位可穿越（落点另judge）。
+   * 默认（false）保持旧行为：任何被占格都绕行——姬昌护送自动寻路用默认值。
+   */
+  function pathTo(from, target, passFriendly) {
     const prev = {}, dist = {}; const q = [from]; dist[key(from)] = 0;
     while (q.length) {
       const cur = q.shift();
@@ -342,7 +387,8 @@
         if (!inBounds(nb)) continue;
         const cl = cellAt(nb);
         if (!cl || cl.type === 'wall' || cl.type === 'rock') continue;
-        if (isOccupied(nb) && !eq(nb, target)) continue;
+        const blocked = passFriendly ? isEnemyOccupied(nb) : isOccupied(nb);
+        if (blocked && !eq(nb, target)) continue;
         const k = key(nb);
         if (dist[k] === undefined) { dist[k] = dist[key(cur)] + 1; prev[k] = cur; q.push(nb); }
       }
@@ -448,8 +494,8 @@
     if (!spiritCat || !spiritCat.alive) return false;
     // 不能落点于敌人或同伴（石友/姬昌）所在格
     if (isOccupied(c)) return false;
-    // 按实际行走格数（路径长度）判断，而不是直线距离
-    const p = pathTo(spiritCat.pos, c);
+    // 按实际行走格数（路径长度）判断，而不是直线距离；我方单位可穿越
+    const p = pathTo(spiritCat.pos, c, true);
     if (!p || p.length === 0) return false;
     return p.length <= spiritCat.moveLeft;
   }
@@ -478,7 +524,7 @@
     if (!spiritCat || state.busy) return;
     if (isOccupied(toC)) { log('通灵猫不能进入已被占据的格子', 'bad'); return; }
     // 每走一格扣 1 点移动力：按实际路径格数（绕障也按格计）
-    const catPath = pathTo(spiritCat.pos, toC);
+    const catPath = pathTo(spiritCat.pos, toC, true);
     const dist = catPath && catPath.length ? catPath.length : hexDist(spiritCat.pos, toC);
     if (dist > spiritCat.moveLeft || dist === 0) return;
     state.busy = true;
@@ -745,7 +791,7 @@
     if (state.phase === 'move') { state.phase = 'attack'; state.attackPlayed = false; state.rested = false; state.selectedCard = null; }
     else if (state.phase === 'attack') { state.phase = 'interact'; state.selectedCard = null; }
     else if (state.phase === 'interact') {
-      state.phase = 'enemy'; state.selectedCard = null; state.catMode = false;
+      state.phase = 'enemy'; state.selectedCard = null; state.catMode = false; state.catSummon = false;
       // 通灵猫：本阶段结束后不再强制收回，留在场上（用户反馈：不应回到石友身上）
       render();
       showPhaseFx('enemy');
@@ -765,7 +811,7 @@
     state.rested = false; state.attackPlayed = false;
     player.panel.moveLeft = player.panel.move;
     player.panel.neiLeft = player.panel.nei;
-    player.blockNext = false; state.busy = false; state.catMode = false;
+    player.blockNext = false; state.busy = false; state.catMode = false; state.catSummon = false;
     // 通灵猫每回合刷新移动力与行动标记
     if (spiritCat) { spiritCat.moveLeft = spiritCat.move; spiritCat.used = false; }
     render();
@@ -821,6 +867,11 @@
         if (en && isTargetable(en)) playCard(state.selectedCard, en);
       }
     } else if (state.phase === 'interact') {
+      // 召唤选址：必须在石友的相邻空格中选一个作为通灵猫起始点
+      if (state.catSummon) {
+        if (!summonCatAt(c)) log('通灵猫只能放在石友相邻的空格上（高亮格）', 'bad');
+        return;
+      }
       if (state.catMode) {
         const en = enemyAt(c);
         if (en && spiritCat && hexDist(spiritCat.pos, c) === 1) { catAtk(en); return; }
@@ -833,7 +884,7 @@
     state.busy = true;
     const from = { col: player.pos.col, row: player.pos.row };
     // 每走一格扣 1 点移动力：按实际行走步数（BFS 路径长度，绕障也按格计），而非每次行动只扣 1 点
-    const walkPath = pathTo(from, c);
+    const walkPath = pathTo(from, c, true);
     const walkCost = walkPath && walkPath.length ? walkPath.length : hexDist(from, c);
     player.pos = { col: c.col, row: c.row };
     player.panel.moveLeft -= walkCost;
@@ -968,6 +1019,9 @@
       enemiesInRange(state.selectedCard.range).forEach(e => state.tgtSet.add(key(e.pos)));
     }
 
+    // 召唤选址：高亮石友相邻的可用空格
+    const summonSet = state.catSummon ? new Set(catSummonCells().map(key)) : null;
+
     let s = '';
     // 底图：第一章·地牢原图（与 viewBox 一致）
     s += '<image href="素材原图/章节地图/第一章-地牢.jpg" ' +
@@ -987,6 +1041,7 @@
         if (cell.feature === 'goal') cls += ' exit';
         if (state.reachSet.has(k)) cls += ' reach';
         if (state.tgtSet.has(k)) cls += ' tgt';
+        if (summonSet && summonSet.has(k)) cls += ' cat-spawn';
         if (state.catMode && spiritCat && !spiritCat.used) {
           const cl = cellAt({ col: c, row: r });
           if (cl && cl.type === 'floor') {
@@ -1219,9 +1274,10 @@
     document.getElementById('btnCat').addEventListener('click', () => {
       if (state.phase !== 'interact') return;
       if (!spiritCat) {
-        spiritCat = makeSpiritCat();
-        state.catMode = true;
-        log('琥珀串珠激活：派出通灵猫！每阶段可移动合计 2 格并攻击一次', 'win');
+        const spots = catSummonCells();
+        if (!spots.length) { log('石友四周没有可放置通灵猫的空格，无法召唤', 'bad'); render(); return; }
+        state.catSummon = true; state.catMode = false;
+        log('选择通灵猫的起始点：点击石友相邻的高亮空格（共 ' + spots.length + ' 个可选）', 'hit');
       } else if (!spiritCat.used) {
         state.catMode = !state.catMode;
         log(state.catMode ? '切换至通灵猫操控' : '结束通灵猫操控', 'hit');
@@ -1291,13 +1347,13 @@
     phaseLock = false;
     freshState(); resetActionDeck();
     state.phase = 'move'; state.turn = 1; state.status = 'playing'; state.msg = '';
-    state.selectedCard = null; state.attackPlayed = false; state.rested = false; state.busy = false; state.catMode = false; state.log = [];
+    state.selectedCard = null; state.attackPlayed = false; state.rested = false; state.busy = false; state.catMode = false; state.catSummon = false; state.log = [];
     render();
   }
   function init() {
     freshState(); resetActionDeck();
     state.phase = 'move'; state.turn = 1; state.status = 'playing'; state.msg = '';
-    state.selectedCard = null; state.attackPlayed = false; state.rested = false; state.busy = false; state.catMode = false; state.log = [];
+    state.selectedCard = null; state.attackPlayed = false; state.rested = false; state.busy = false; state.catMode = false; state.catSummon = false; state.log = [];
     log('【第一章·地牢】护送姬昌回到任意玩家起点（卒）即胜利。', 'win');
     log('石友装备：生锈的长枪（枪）、布衣、琥珀串珠（灵猫）。', 'hit');
     log('属性按 §3.1.3 求和：武力2 / 内力1 / 灵力0 / 体力2 → 生命14 / 移动2。', 'hit');

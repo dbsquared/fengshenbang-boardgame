@@ -4,7 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>封神榜 · 地牢（第一章原型 v0.3）</title>
-<link rel="stylesheet" href="style.css?v=20261025o"/>
+<link rel="stylesheet" href="style.css?v=20261025p"/>
 </head>
 <body>
 <div id="app">
@@ -14,7 +14,7 @@
     <div class="statusbar">
       <span id="phaseBadge" class="badge">移动阶段</span>
       <span id="turnInfo" class="turn">回合 1</span>
-      <span id="verInfo" class="ver">v20261025o</span>
+      <span id="verInfo" class="ver">v20261025p</span>
       <span id="banner" class="banner"></span>
     </div>
   </header>
@@ -24,7 +24,7 @@
         <svg id="board" xmlns="http://www.w3.org/2000/svg"></svg>
         <div id="phaseFx" class="phase-fx" aria-hidden="true"></div>
       </div>
-      <div class="hint" id="hint">你从右侧 4 个「卒」格之一出发；选招式卡后点敌人出招（内力够就能连打任意多张）；与姬昌相邻时可在「交互阶段」护送他回卒格；交互阶段可召通灵猫（移动2格/扑击1伤，生命 5，会被敌人攻击）。<b>移动端：短按单位＝选它为目标，长按单位＝查看信息卡。</b>注意：姬昌只有 1 点生命，且敌方在他与玩家同时进入射程时会优先攻击他；「格挡」只能保护石友本人，且只能挡近战；小兵会在离你最近的卒格复活。</div>
+      <div class="hint" id="hint">你从右侧 4 个「卒」格之一出发；选招式卡后点敌人出招（内力够就能连打任意多张）；与姬昌相邻时可在「交互阶段」护送他回卒格；交互阶段可召通灵猫（移动2格/扑击1伤，生命 5，会被敌人攻击；每次召唤石友自减 5 点生命，灵猫阵亡后可重召）。<b>移动端：短按单位＝选它为目标，长按单位＝查看信息卡。</b>注意：姬昌只有 1 点生命，且敌方在他与玩家同时进入射程时会优先攻击他；「格挡」只能保护石友本人，且只能挡近战；小兵会在离你最近的卒格复活。</div>
     </section>
     <aside class="sidebar">
       <div class="panel" id="playerPanel"></div>
@@ -84,6 +84,6 @@
   </div>
 </div>
 
-<script src="game.js?v=20261025o"></script>
+<script src="game.js?v=20261025p"></script>
 </body>
 </html>

@@ -190,7 +190,7 @@
     tunci:    { id: 'tunci',    name: '突刺',   cost: 1, weapon: '枪', dmgMode: 'fixed', dmg: 2, range: 1, type: 'attack', desc: '造成2点伤害（需枪）' },
     yongtui:  { id: 'yongtui',  name: '用劲推', cost: 1, weapon: '',   dmgMode: 'wu',   range: 1, push: 1, type: 'attack', desc: '造成(武-1)伤害，推远1格' },
     lianhuan: { id: 'lianhuan', name: '连环掌', cost: 1, weapon: '',   dmgMode: 'wu',   range: 1, push: 1, type: 'attack', desc: '造成(武-1)伤害，推远1格' },
-    gedang:   { id: 'gedang',   name: '格挡',   cost: 0, weapon: '',   type: 'react', desc: '敌方攻击时触发：减少1点伤害（应对卡）' },
+    gedang:   { id: 'gedang',   name: '格挡',   cost: 0, weapon: '',   type: 'react', desc: '遭受近战攻击时触发：减少1点伤害（应对卡）' },
     feitui:   { id: 'feitui',   name: '飞踢',   cost: 1, weapon: '',   dmgMode: 'wu',   range: 1, selfMove: true, type: 'attack', desc: '移动1格并造成(武-1)伤害' },
     tiaoxi:   { id: 'tiaoxi',   name: '调息',   cost: 'X', weapon: '', type: 'heal', healHp: 1, gainNei: 1, desc: '恢复1生命与1内力（耗全部内力X）' },
     huima:    { id: 'huima',    name: '回马枪', cost: 'X', weapon: '枪', dmgMode: 'wu', range: 1, selfMove: true, type: 'attack', desc: '移动1格造成(武-1)伤害（需枪）' },
@@ -217,8 +217,8 @@
   //   殷商弓兵  射击 1-11/1-12/1-15：移动 1 格 → 距离 3 造成 2 伤害
   // 第一章无头目（用户确认）。
   const MINION_TYPES = [
-    { id: 'inf', name: '殷商步兵', char: '步', hp: 5, atk: 3, range: 1, move: 2 },
-    { id: 'arc', name: '殷商弓兵', char: '弓', hp: 3, atk: 2, range: 3, move: 1 },
+    { id: 'inf', name: '殷商步兵', char: '步', hp: 5, atk: 3, range: 1, move: 2, melee: true },
+    { id: 'arc', name: '殷商弓兵', char: '弓', hp: 3, atk: 2, range: 3, move: 1, melee: false },
   ];
   function makeMinion(spawn, idx) {
     const spec = spawn.kind === 'R' ? MINION_TYPES[1] : MINION_TYPES[0];
@@ -226,7 +226,7 @@
       id: spec.id, name: spec.name, char: spec.char, kind: 'minion',
       type: spawn.kind === 'R' ? 'R' : 'F',   // F=步兵 R=弓兵（对应行动卡归属）
       pos: { col: spawn.col, row: spawn.row }, hp: spec.hp, maxHp: spec.hp,
-      atk: spec.atk, range: spec.range, move: spec.move,
+      atk: spec.atk, range: spec.range, move: spec.move, melee: spec.melee !== false,
       spawn: { col: spawn.col, row: spawn.row },
       alive: true, reviveAtGoal: true, revives: 0, passive: '无特殊效果',
     };
@@ -373,7 +373,7 @@
     const cost = cardCost(card);
     if (card.type === 'react') {
       // 应对卡不应在出招阶段主动使用（手牌已禁用点击，这里再兜一层）
-      log('【' + card.name + '】是应对卡，需在敌方攻击时选择触发', 'bad');
+      log('【' + card.name + '】是应对卡，需在遭受近战攻击时选择触发', 'bad');
       render(); return;
     } else if (card.type === 'heal') {
       const neiBefore = player.panel.neiLeft;
@@ -558,7 +558,7 @@
       const use = document.getElementById('rpUse');
       const skip = document.getElementById('rpSkip');
       if (!wrap || !text || !use || !skip) { resolve(false); return; }
-      text.textContent = attackerName + '攻击' + targetName + '，即将造成 ' + dmg +
+      text.textContent = attackerName + '近战攻击' + targetName + '，即将造成 ' + dmg +
         ' 点伤害。是否打出【' + card.name + '】？（' + (card.desc || '') + '）';
       use.textContent = '打出【' + card.name + '】';
       skip.textContent = '不打出（承受 ' + dmg + ' 点伤害）';
@@ -576,13 +576,18 @@
     });
   }
 
+  // 近战判定：按兵种的攻击方式，而不是格子距离——步兵（射程 1）为近战，弓兵（射程 3）为远程。
+  // 弓兵即便贴身射击仍是远程攻击，无法用「格挡」应对。
+  function isMeleeAttacker(e) { return e.melee !== false; }
+
   async function enemyAttack(e, target) {
     let dmg = e.atk;
     let usedReact = null;
-    // 应对卡（0 内力，如「格挡」）：只在敌方攻击时提示是否触发，不在己方出招阶段主动使用
+    // 应对卡（0 内力，如「格挡」）：仅在**遭受近战攻击**时提示是否触发（用户明确规则）；
+    // 不在己方出招阶段主动使用。
     if (target === player) {
       const rc = player.hand.find(c => c.type === 'react');
-      if (rc) {
+      if (rc && isMeleeAttacker(e)) {
         const use = await promptReact(rc, e.name, target.name, dmg);
         if (use) {
           usedReact = rc;
@@ -592,6 +597,8 @@
           dmg = Math.max(0, dmg - 1);            // 格挡：减少 1 点伤害（卡面数值）
           log('石友打出【' + rc.name + '】：伤害 ' + before + ' → ' + dmg, 'hit');
         }
+      } else if (rc) {
+        log(e.name + '为远程攻击（射程 ' + e.range + '），【' + rc.name + '】只能挡近战，无法应对', 'bad');
       }
     }
     const tgtUid = target === player ? 'p' : (target === jiChang ? 'ji' : '');
@@ -701,7 +708,7 @@
   // 这张卡此刻是否真能打出去（纯判断，不改任何数值）
   function playableNow(card) {
     if (state.rested) return false;                   // 本阶段已休整：不能再打出任何招式卡
-    if (card.type === 'react') return false;          // 应对卡只等敌方攻击时提示
+    if (card.type === 'react') return false;          // 应对卡只等遭受近战攻击时提示
     if (!canPlay(card)) return false;                 // 内力不足 / 武器不符
     if (card.type === 'attack') return enemiesInRange(card.range).length > 0;   // 必须有可打目标
     return true;                                      // 无目标卡（调息等）
@@ -1096,7 +1103,7 @@
       ? '本阶段已休整：手牌锁定，收回的招式下回合才能使用' : '';
     if (player.hand.length === 0) { el.innerHTML = '<div style="color:var(--ink-dim);font-size:13px">（手牌为空，可「休整」收回）</div>'; return; }
     player.hand.forEach(card => {
-      // 应对卡（格挡等）不能在己方出招阶段主动打出，只能在敌方攻击时由提示触发；
+      // 应对卡（格挡等）不能在己方出招阶段主动打出，只能在遭受近战攻击时由提示触发；
       // 本阶段已休整的，手牌全部锁住（休整与打招式卡只能二选一）
       const dis = state.phase !== 'attack' || card.type === 'react' || state.rested || !canPlay(card);
       const div = document.createElement('div');
@@ -1108,7 +1115,7 @@
         (card.weapon ? '<div class="wp">' + card.weapon + '</div>' : '');
       if (!dis) div.addEventListener('click', () => {
         if (state.busy) return;
-        // 应对卡（格挡）只在敌方攻击时由提示触发，出招阶段点了也只提示不结算
+        // 应对卡（格挡）只在遭受近战攻击时由提示触发，出招阶段点了也只提示不结算
         if (card.type === 'react') { playCard(card, null); return; }
         // 无目标卡（调息等）：点击即结算，不需要再点棋盘选目标
         if (card.type === 'heal') { playCard(card, null); return; }

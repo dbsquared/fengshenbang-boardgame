@@ -153,6 +153,44 @@
   playerStart = { col: goals[0].col, row: goals[0].row };
   function cellAt(c) { return inBounds(c) ? cells[c.row][c.col] : null; }
 
+  /* ---------------- 六边形射线（弓兵视线判定用） ----------------
+   * 在 cube 坐标里对两端线性插值并按六边形取整，得到两点之间「穿过」的格子序列（不含起点与终点）。
+   * 不用像素采样，避免版图单应性透视带来的误差。
+   */
+  function cubeRound(c) {
+    let rx = Math.round(c.x), ry = Math.round(c.y), rz = Math.round(c.z);
+    const dx = Math.abs(rx - c.x), dy = Math.abs(ry - c.y), dz = Math.abs(rz - c.z);
+    if (dx > dy && dx > dz) rx = -ry - rz;
+    else if (dy > dz) ry = -rx - rz;
+    else rz = -rx - ry;
+    return { x: rx, z: rz };
+  }
+  function cubeToCell(cb) {
+    const col = cb.x;
+    return { col: col, row: cb.z + (col - (col & 1)) / 2 };   // odd-q 反算
+  }
+  function cellsOnLine(from, to) {
+    const n = hexDist(from, to);
+    if (n <= 0) return [];
+    const A = toCube(from), B = toCube(to);
+    const out = [], seen = new Set();
+    for (let i = 1; i < n; i++) {
+      const t = i / n;
+      const c = cubeToCell(cubeRound({
+        x: A.x + (B.x - A.x) * t,
+        y: A.y + (B.y - A.y) * t,
+        z: A.z + (B.z - A.z) * t,
+      }));
+      if (!inBounds(c)) continue;
+      const k = key(c);
+      if (seen.has(k)) continue;      // 擦过格角时可能重复命中同一格
+      seen.add(k);
+      const cl = cellAt(c);
+      if (cl) out.push(cl);
+    }
+    return out;
+  }
+
   /* ---------------- 石友真实初始属性（按装备卡颜色数字之和 §3.1.3） ----------------
    * 由 石友角色卡包-正面.jpg 三张装备卡逐格裁出，卡面红/绿/蓝/橙 圆框数字：
    *   生锈的长枪 (武器·枪)  → 红1 绿0 蓝0 橙1   (武力1 内力0 灵力0 体力1)   被动/主动: 无特殊效果
@@ -664,6 +702,31 @@
       });
     }
   }
+  /* ---------------- 弓兵射击视线 ---------------- */
+  // 用户规则：弓兵射击时，射击路线上不能有「小兵以外」的障碍——
+  //   · 地形（墙 / 岩石）挡箭；
+  //   · 非小兵的我方单位（石友 / 姬昌 / 通灵猫）挡箭；
+  //   · 敌方小兵不挡箭（可以越过同伴射击）。
+  function isRanged(e) { return (e.range || 1) > 1; }
+  function shotBlocked(from, to) {
+    const friendly = new Set();
+    if (player.alive) friendly.add(key(player.pos));
+    if (jiChang.hp > 0) friendly.add(key(jiChang.pos));
+    if (spiritCat && spiritCat.alive) friendly.add(key(spiritCat.pos));
+    for (const cell of cellsOnLine(from, to)) {
+      if (cell.type === 'wall' || cell.type === 'rock') return true;
+      if (friendly.has(key(cell))) return true;
+    }
+    return false;
+  }
+  // 该敌人此刻能否攻击该目标：近战只看距离；远程还要射线通畅
+  function canShootAt(e, t) {
+    if (!e || !t) return false;
+    if (hexDist(e.pos, t.pos) > e.range) return false;
+    if (!isRanged(e)) return true;
+    return !shotBlocked(e.pos, t.pos);
+  }
+
   /* ---------------- 敌方 AI ---------------- */
   async function enemyAct(e) {
     // 未触发剧情前姬昌在牢房里，不是合法目标。
@@ -676,15 +739,16 @@
     const moveTarget = targets[0];
     const atkUid = 'm' + enemies.indexOf(e);
     const start = { col: e.pos.col, row: e.pos.row };
-    // 敌方移动规则：在射程内则停止移动（规则书 §4.4），否则向最近目标靠拢
-    if (hexDist(e.pos, moveTarget.pos) > e.range) {
+    // 敌方移动规则：有目标能打就停止移动（规则书 §4.4），否则向最近目标靠拢。
+    // 弓兵若射程够但射线被挡，也要继续找位置（canShootAt 内含视线判定）。
+    if (!targets.some(t => canShootAt(e, t))) {
       const path = pathTo(e.pos, moveTarget.pos);
       if (path && path.length) {
         for (let i = 0; i < e.move && i < path.length; i++) {
           const step = path[i];
           if (isOccupied(step)) break;
           e.pos = step;
-          if (hexDist(e.pos, moveTarget.pos) <= e.range) break;
+          if (targets.some(t => canShootAt(e, t))) break;
         }
       }
     }
@@ -692,10 +756,15 @@
     // 移动动画结束立即重绘，让单位基准位置同步到 DOM，否则后续攻击动画会受残留 transform 影响
     render();
     // 说明书 P22「护送姬昌」：若姬昌与玩家同时处在敌方最近攻击范围内，敌方优先攻击姬昌
-    const inRange = targets.filter(t => hexDist(e.pos, t.pos) <= e.range);
+    const inRange = targets.filter(t => canShootAt(e, t));
     if (inRange.length) {
       const tgt = (jiChang.hp > 0 && inRange.indexOf(jiChang) >= 0) ? jiChang : inRange[0];
       await enemyAttack(e, tgt);
+    } else if (isRanged(e)) {
+      const near = targets.filter(t => hexDist(e.pos, t.pos) <= e.range);
+      if (near.length) {
+        log(e.name + '与' + near[0].name + '之间的射击路线被挡住（墙/岩石，或中间隔着石友、姬昌、通灵猫），无法射击', 'bad');
+      }
     }
   }
   // 注意：玩家的血量在 player.panel.hp，姬昌/小兵在各自的 .hp —— 统一走这两个存取器，
@@ -1244,6 +1313,9 @@
       h += '<b>' + u.name + '</b>（敌方）<br>';
       h += '生命 ' + u.hp + '/' + u.maxHp + '<br>';
       h += '攻击 ' + u.atk + ' ／ 移动 ' + u.move + ' ／ 射程 ' + u.range + '<br>';
+      if (isRanged(u)) {
+        h += '<span class="tip-dim">射击需要通视：射线上不能有墙/岩石，也不能隔着石友、姬昌、通灵猫（敌方小兵不挡箭）。被挡住时它会继续移动找位置。</span><br>';
+      }
       h += '<span class="tip-dim">击杀后在「离玩家最近的卒格」复活' +
         (ASSIST.enabled ? '；剩余复活 ' + Math.max(0, ASSIST.reviveLimit - u.revives) + ' 次' : '（原规则：无限）') +
         '</span>';

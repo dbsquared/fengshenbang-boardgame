@@ -407,9 +407,31 @@
     return true;
   }
   function enemiesInRange(range) { return enemies.filter(e => e.alive && hexDist(player.pos, e.pos) <= range); }
+  /* 位移类招式（飞踢 / 回马枪）：卡面「移动1格并造成伤害」，移动在前。
+   * 因此这类招式可以打「距离 range+1」的敌人——先走 1 格贴近，再结算伤害。
+   * 返回：null = 已贴身无需移动；{col,row} = 需要先移动到的格子；undefined = 走一步也够不到。
+   */
+  function selfMoveStep(card, en) {
+    if (!en || !en.alive) return undefined;
+    if (hexDist(player.pos, en.pos) <= card.range) return null;
+    const p = pathTo(player.pos, en.pos, true);
+    if (!p || !p.length) return undefined;
+    const s = p[0];
+    if (isOccupied(s)) return undefined;
+    if (hexDist(s, en.pos) > card.range) return undefined;   // 走一步仍不在射程内
+    return s;
+  }
+  // 招式当前真正可以打到的敌人（位移类招式含「移动后可达」的目标）
+  function attackTargets(card) {
+    return enemies.filter(e => {
+      if (!e.alive) return false;
+      if (hexDist(player.pos, e.pos) <= card.range) return true;
+      return !!card.selfMove && !!selfMoveStep(card, e);
+    });
+  }
   function isTargetable(en) {
     if (!state.selectedCard || state.selectedCard.type !== 'attack') return false;
-    return hexDist(player.pos, en.pos) <= state.selectedCard.range;
+    return attackTargets(state.selectedCard).includes(en);
   }
   async function playCard(card, targetEnemy) {
     if (!player.hand.includes(card)) return;   // 防止重复点击已打出的卡再次结算
@@ -437,11 +459,22 @@
       if (healed > 0) await floatText(player.pos, '+' + healed, '#7CFC8C');
       render(); scheduleAttackAutoAdvance(850); return;
     }
-    // 攻击：先播放演出，再结算伤害（不改动任何规则数值）
+    // 攻击：先处理「移动」位移（飞踢 / 回马枪），再播放演出并结算伤害（不改动任何规则数值）
     state.busy = true;
     player.panel.neiLeft -= cost;
     const dmg = cardDmg(card);
-    const hits = card.aoe ? enemiesInRange(card.range) : (targetEnemy ? [targetEnemy] : []);
+    // 位移类招式：先朝目标移动 1 格（卡面顺序是「移动1格并造成伤害」）
+    if (card.selfMove && targetEnemy) {
+      const step = selfMoveStep(card, targetEnemy);
+      if (step) {
+        const from = { col: player.pos.col, row: player.pos.row };
+        player.pos = { col: step.col, row: step.row };
+        log('石友以「' + card.name + '」向前移动 1 格至 (' + step.col + ',' + step.row + ')', 'hit');
+        await animateMove('p', from, player.pos);
+      }
+    }
+    const hits = card.aoe ? enemiesInRange(card.range)
+      : (targetEnemy && hexDist(player.pos, targetEnemy.pos) <= card.range ? [targetEnemy] : []);
     if (hits.length === 0) log('「' + card.name + '」未命中目标', 'bad');
     for (const en of hits) {
       const idx = enemies.indexOf(en);
@@ -449,13 +482,7 @@
       en.hp -= dmg;
       log('石友以「' + card.name + '」对' + en.name + '造成' + dmg + '点伤害', 'hit');
     }
-    // 自身位移（出招后前冲 1 格）
-    if (card.selfMove && targetEnemy && hits.length) {
-      const from = { col: player.pos.col, row: player.pos.row };
-      const p = pathTo(player.pos, targetEnemy.pos);
-      if (p && p.length) { const s = p[0]; if (!isOccupied(s)) player.pos = s; }
-      await animateMove('p', from, player.pos);
-    }
+    // （位移类招式的「移动 1 格」已在攻击结算前处理，此处不再重复移动）
     // 击退：推到「玩家→敌人」延长线上的下一格（轴向 cube 坐标求直线方向，不绕障碍）；
     // 目标格不可移动（墙/岩石/被占/越界）则不推。
     if (card.push && targetEnemy && hits.length) {
@@ -756,7 +783,8 @@
     if (state.rested) return false;                   // 本阶段已休整：不能再打出任何招式卡
     if (card.type === 'react') return false;          // 应对卡只等遭受近战攻击时提示
     if (!canPlay(card)) return false;                 // 内力不足 / 武器不符
-    if (card.type === 'attack') return enemiesInRange(card.range).length > 0;   // 必须有可打目标
+    // 攻击卡必须有可打目标（位移类招式含「先移动 1 格后可达」的目标）
+    if (card.type === 'attack') return attackTargets(card).length > 0;
     return true;                                      // 无目标卡（调息等）
   }
   // 出招阶段是否还有玩家可做的事：能打牌 或 能休整（规则书 §4.2 不限次数，只看条件和内力）
@@ -1016,7 +1044,7 @@
     state.reachSet = computeReach();
     state.tgtSet = new Set();
     if (state.phase === 'attack' && state.selectedCard && state.selectedCard.type === 'attack') {
-      enemiesInRange(state.selectedCard.range).forEach(e => state.tgtSet.add(key(e.pos)));
+      attackTargets(state.selectedCard).forEach(e => state.tgtSet.add(key(e.pos)));
     }
 
     // 召唤选址：高亮石友相邻的可用空格

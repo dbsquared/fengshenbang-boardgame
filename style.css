@@ -213,3 +213,26 @@ button.primary:hover:not(:disabled){background:var(--seal2)}
 @media (prefers-reduced-motion: reduce){
   .phase-fx.show .fx-band, .phase-fx.show .fx-text{ animation-duration: .01ms; }
 }
+
+/* ---------------- 应对卡触发提示 ---------------- */
+.react-prompt{
+  position: fixed; inset: 0; z-index: 70; display: flex; align-items: center; justify-content: center;
+  padding: 20px; background: rgba(8,6,4,.74); backdrop-filter: blur(2px);
+}
+.react-prompt.hidden{ display: none; }
+.rp-box{
+  width: 100%; max-width: 460px; padding: 22px 24px; border-radius: 14px;
+  background: linear-gradient(180deg, #261e15, #1a1410);
+  border: 1px solid rgba(201,162,75,.65);
+  box-shadow: 0 12px 44px rgba(0,0,0,.75), inset 0 0 0 1px rgba(192,57,43,.18);
+  animation: rpIn .22s cubic-bezier(.2,.8,.2,1) both;
+}
+@keyframes rpIn{ from{ opacity: 0; transform: translateY(12px) scale(.96); } to{ opacity: 1; transform: none; } }
+.rp-kicker{ font-size: 12px; letter-spacing: .34em; color: var(--seal); margin-bottom: 6px; }
+.rp-title{ font-size: 23px; letter-spacing: .1em; color: var(--gold); margin-bottom: 10px; }
+.rp-text{ font-size: 14.5px; line-height: 1.85; color: var(--ink); margin-bottom: 18px; }
+.rp-actions{ display: flex; gap: 10px; }
+.rp-actions button{ flex: 1; }
+@media (prefers-reduced-motion: reduce){
+  .rp-box{ animation-duration: .01ms; }
+}

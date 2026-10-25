@@ -366,6 +366,7 @@
     return hexDist(player.pos, en.pos) <= state.selectedCard.range;
   }
   async function playCard(card, targetEnemy) {
+    if (!player.hand.includes(card)) return;   // 防止重复点击已打出的卡再次结算
     if (!canPlay(card)) { log('无法施展：' + card.name, 'bad'); return; }
     const cost = cardCost(card);
     if (card.type === 'react') {
@@ -373,14 +374,20 @@
       log('【' + card.name + '】是应对卡，需在敌方攻击时选择触发', 'bad');
       render(); return;
     } else if (card.type === 'heal') {
+      const neiBefore = player.panel.neiLeft;
       player.panel.neiLeft -= cost;
       const before = player.panel.hp;
       player.panel.hp = Math.min(player.panel.maxHp, player.panel.hp + (card.healHp || 0));
-      player.panel.neiLeft += (card.gainNei || 0);
-      log('石友调息：恢复' + (card.healHp || 0) + '生命、内力+1', 'hit');
+      player.panel.neiLeft = Math.min(player.panel.nei, player.panel.neiLeft + (card.gainNei || 0));
       const healed = player.panel.hp - before;
+      // 立即移出手牌并标记本阶段已出招，避免治疗飘字期间重复结算
+      const hi = player.hand.indexOf(card); if (hi >= 0) player.hand.splice(hi, 1);
+      player.discard.push(card);
+      state.attackPlayed = true; state.selectedCard = null;
+      log('石友调息：生命 +' + healed + '，内力 ' + neiBefore + ' → ' + player.panel.neiLeft, 'hit');
+      checkEnd();
       if (healed > 0) await floatText(player.pos, '+' + healed, '#7CFC8C');
-      checkEnd(); render(); return;
+      render(); return;
     }
     // 攻击：先播放演出，再结算伤害（不改动任何规则数值）
     state.busy = true;
@@ -1050,7 +1057,12 @@
         '<div class="ds">' + (card.desc || '') + '</div>' +
         (card.weapon ? '<div class="wp">' + card.weapon + '</div>' : '');
       if (!dis) div.addEventListener('click', () => {
+        if (state.busy) return;
+        // 应对卡（格挡）只在敌方攻击时由提示触发，出招阶段点了也只提示不结算
         if (card.type === 'react') { playCard(card, null); return; }
+        // 无目标卡（调息等）：点击即结算，不需要再点棋盘选目标
+        if (card.type === 'heal') { playCard(card, null); return; }
+        // 攻击卡：先选中，再点棋盘上的敌人作为目标
         state.selectedCard = (state.selectedCard === card) ? null : card;
         render();
       });

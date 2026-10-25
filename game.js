@@ -190,7 +190,7 @@
     tunci:    { id: 'tunci',    name: '突刺',   cost: 1, weapon: '枪', dmgMode: 'fixed', dmg: 2, range: 1, type: 'attack', desc: '造成2点伤害（需枪）' },
     yongtui:  { id: 'yongtui',  name: '用劲推', cost: 1, weapon: '',   dmgMode: 'wu',   range: 1, push: 1, type: 'attack', desc: '造成(武-1)伤害，推远1格' },
     lianhuan: { id: 'lianhuan', name: '连环掌', cost: 1, weapon: '',   dmgMode: 'wu',   range: 1, push: 1, type: 'attack', desc: '造成(武-1)伤害，推远1格' },
-    gedang:   { id: 'gedang',   name: '格挡',   cost: 0, weapon: '',   type: 'react', desc: '减少1点伤害（应对卡）' },
+    gedang:   { id: 'gedang',   name: '格挡',   cost: 0, weapon: '',   type: 'react', desc: '敌方攻击时触发：减少1点伤害（应对卡）' },
     feitui:   { id: 'feitui',   name: '飞踢',   cost: 1, weapon: '',   dmgMode: 'wu',   range: 1, selfMove: true, type: 'attack', desc: '移动1格并造成(武-1)伤害' },
     tiaoxi:   { id: 'tiaoxi',   name: '调息',   cost: 'X', weapon: '', type: 'heal', healHp: 1, gainNei: 1, desc: '恢复1生命与1内力（耗全部内力X）' },
     huima:    { id: 'huima',    name: '回马枪', cost: 'X', weapon: '枪', dmgMode: 'wu', range: 1, selfMove: true, type: 'attack', desc: '移动1格造成(武-1)伤害（需枪）' },
@@ -369,8 +369,8 @@
     if (!canPlay(card)) { log('无法施展：' + card.name, 'bad'); return; }
     const cost = cardCost(card);
     if (card.type === 'react') {
-      player.blockNext = true;
-      log('石友架招（格挡）：将抵消下一次伤害', 'hit');
+      // 应对卡不应在出招阶段主动使用（手牌已禁用点击，这里再兜一层）
+      log('【' + card.name + '】是应对卡，需在敌方攻击时选择触发', 'bad');
       render(); return;
     } else if (card.type === 'heal') {
       player.panel.neiLeft -= cost;
@@ -540,17 +540,58 @@
   // 否则会出现「攻击日志正常但玩家永远不掉血」的假象（v0.5 修复）。
   function hpOf(t) { return t === player ? player.panel.hp : t.hp; }
   function dealDamage(t, dmg) { if (t === player) player.panel.hp -= dmg; else t.hp -= dmg; }
+  /* 应对卡触发提示：等待玩家选择「使用 / 不触发」 */
+  function promptReact(card, attackerName, targetName, dmg) {
+    return new Promise(function (resolve) {
+      const wrap = document.getElementById('reactPrompt');
+      const text = document.getElementById('rpText');
+      const use = document.getElementById('rpUse');
+      const skip = document.getElementById('rpSkip');
+      if (!wrap || !text || !use || !skip) { resolve(false); return; }
+      text.textContent = attackerName + '攻击' + targetName + '，即将造成 ' + dmg +
+        ' 点伤害。是否打出【' + card.name + '】？（' + (card.desc || '') + '）';
+      use.textContent = '打出【' + card.name + '】';
+      skip.textContent = '不打出（承受 ' + dmg + ' 点伤害）';
+      wrap.classList.remove('hidden');
+      function cleanup(val) {
+        wrap.classList.add('hidden');
+        use.removeEventListener('click', onUse);
+        skip.removeEventListener('click', onSkip);
+        resolve(val);
+      }
+      function onUse() { cleanup(true); }
+      function onSkip() { cleanup(false); }
+      use.addEventListener('click', onUse);
+      skip.addEventListener('click', onSkip);
+    });
+  }
+
   async function enemyAttack(e, target) {
     let dmg = e.atk;
-    if (target.blockNext) {
-      target.blockNext = false;
-      log(target.name + '架招抵消了' + e.name + '的攻击！', 'hit');
-      await floatText(target.pos, '格挡', '#ffd86b');
-      return;
+    let usedReact = null;
+    // 应对卡（0 内力，如「格挡」）：只在敌方攻击时提示是否触发，不在己方出招阶段主动使用
+    if (target === player) {
+      const rc = player.hand.find(c => c.type === 'react');
+      if (rc) {
+        const use = await promptReact(rc, e.name, target.name, dmg);
+        if (use) {
+          usedReact = rc;
+          player.hand = player.hand.filter(c => c !== rc);
+          player.discard.push(rc);
+          const before = dmg;
+          dmg = Math.max(0, dmg - 1);            // 格挡：减少 1 点伤害（卡面数值）
+          log('石友打出【' + rc.name + '】：伤害 ' + before + ' → ' + dmg, 'hit');
+        }
+      }
     }
     const tgtUid = target === player ? 'p' : (target === jiChang ? 'ji' : '');
     const atkUid = 'm' + enemies.indexOf(e);
     await playAttack(atkUid, tgtUid, e.pos, target.pos, dmg);
+    if (dmg <= 0) {
+      log((usedReact ? '【' + usedReact.name + '】' : '') + '完全抵消了' + e.name + '的攻击！', 'hit');
+      await floatText(target.pos, '格挡', '#ffd86b');
+      return;
+    }
     dealDamage(target, dmg);
     log(e.name + '攻击' + target.name + '，造成' + dmg + '点伤害', 'bad');
     if (target === player) {
@@ -826,7 +867,7 @@
         { duration: ANIM.hitDur, easing: 'ease-in-out' }
       ).finished.catch(function(){ return undefined; }));
     }
-    proms.push(floatText(toPos, '-' + dmg, '#ff6b6b'));
+    if (dmg > 0) proms.push(floatText(toPos, '-' + dmg, '#ff6b6b'));
     await Promise.all(proms);
   }
 
@@ -999,7 +1040,8 @@
     el.innerHTML = '';
     if (player.hand.length === 0) { el.innerHTML = '<div style="color:var(--ink-dim);font-size:13px">（手牌为空，可「休整」收回）</div>'; return; }
     player.hand.forEach(card => {
-      const dis = state.phase !== 'attack' || !canPlay(card);
+      // 应对卡（格挡等）不能在己方出招阶段主动打出，只能在敌方攻击时由提示触发
+    const dis = state.phase !== 'attack' || card.type === 'react' || !canPlay(card);
       const div = document.createElement('div');
       div.className = 'card' + (state.selectedCard === card ? ' sel' : '') + (dis ? ' dis' : '');
       div.innerHTML =

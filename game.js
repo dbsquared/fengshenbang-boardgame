@@ -293,7 +293,7 @@
   /* ---------------- 全局状态 ---------------- */
   const state = {
     phase: 'move', turn: 1, status: 'playing', msg: '', busy: false,
-    selectedCard: null, attackPlayed: false, catMode: false, catStep: 0,
+    selectedCard: null, attackPlayed: false, rested: false, catMode: false, catStep: 0,
     reachSet: new Set(), tgtSet: new Set(), log: [],
   };
   const PHASE_NAME = { move: '移动阶段', attack: '出招阶段', interact: '交互阶段', enemy: '敌方行动' };
@@ -367,6 +367,8 @@
   }
   async function playCard(card, targetEnemy) {
     if (!player.hand.includes(card)) return;   // 防止重复点击已打出的卡再次结算
+    // 出招阶段：休整与打招式卡只能选一个执行
+    if (state.rested) { log('本阶段已休整，不能再打出招式卡（休整与出招只能二选一）', 'bad'); render(); return; }
     if (!canPlay(card)) { log('无法施展：' + card.name, 'bad'); return; }
     const cost = cardCost(card);
     if (card.type === 'react') {
@@ -698,6 +700,7 @@
   }
   // 这张卡此刻是否真能打出去（纯判断，不改任何数值）
   function playableNow(card) {
+    if (state.rested) return false;                   // 本阶段已休整：不能再打出任何招式卡
     if (card.type === 'react') return false;          // 应对卡只等敌方攻击时提示
     if (!canPlay(card)) return false;                 // 内力不足 / 武器不符
     if (card.type === 'attack') return enemiesInRange(card.range).length > 0;   // 必须有可打目标
@@ -706,6 +709,7 @@
   // 出招阶段是否还有玩家可做的事：能打牌 或 能休整（规则书 §4.2 不限次数，只看条件和内力）
   function attackHasOptions() {
     if (state.status !== 'playing' || state.phase !== 'attack') return false;
+    if (state.rested) return false;                   // 已休整 → 本阶段只剩「结束本阶段」
     if (player.hand.some(playableNow)) return true;
     if (!state.attackPlayed && player.discard.length > 0) return true;   // 休整
     return false;
@@ -722,7 +726,7 @@
     // 动画/切换锁未释放时稍后重试，不要强行打断
     if (state.busy || phaseLock) { autoAdvanceTimer = setTimeout(tryAttackAutoAdvance, 320); return; }
     if (attackHasOptions()) return;
-    log('出招阶段已无可执行行动，自动进入交互阶段', 'hit');
+    log(state.rested ? '本阶段已休整，进入交互阶段' : '出招阶段已无可执行行动，自动进入交互阶段', 'hit');
     endPhase();
   }
 
@@ -731,7 +735,7 @@
     if (phaseLock || state.busy || state.status !== 'playing') return;
     phaseLock = true;                // 防止连点「结束本阶段」一次跳过两个阶段
     stopAttackAutoAdvance();         // 手动结束时取消待触发的自动跳阶段，避免多跳一格
-    if (state.phase === 'move') { state.phase = 'attack'; state.attackPlayed = false; state.selectedCard = null; }
+    if (state.phase === 'move') { state.phase = 'attack'; state.attackPlayed = false; state.rested = false; state.selectedCard = null; }
     else if (state.phase === 'attack') { state.phase = 'interact'; state.selectedCard = null; }
     else if (state.phase === 'interact') {
       state.phase = 'enemy'; state.selectedCard = null; state.catMode = false;
@@ -751,6 +755,7 @@
   function startNewTurn() {
     stopAttackAutoAdvance();         // 新回合开始，清掉上一阶段残留的自动跳转
     state.turn += 1; state.phase = 'move';
+    state.rested = false; state.attackPlayed = false;
     player.panel.moveLeft = player.panel.move;
     player.panel.neiLeft = player.panel.nei;
     player.blockNext = false; state.busy = false; state.catMode = false;
@@ -1084,11 +1089,16 @@
   function stat(k, v) { return '<div class="stat"><div class="k">' + k + '</div><div class="v">' + v + '</div></div>'; }
   function renderHand() {
     const el = document.getElementById('hand');
+    const hint = document.getElementById('handHint');
     el.innerHTML = '';
+    // 休整与打招式卡只能二选一：休整后给出明确提示，避免误以为按钮失灵
+    if (hint) hint.textContent = (state.phase === 'attack' && state.rested)
+      ? '本阶段已休整：手牌锁定，收回的招式下回合才能使用' : '';
     if (player.hand.length === 0) { el.innerHTML = '<div style="color:var(--ink-dim);font-size:13px">（手牌为空，可「休整」收回）</div>'; return; }
     player.hand.forEach(card => {
-      // 应对卡（格挡等）不能在己方出招阶段主动打出，只能在敌方攻击时由提示触发
-    const dis = state.phase !== 'attack' || card.type === 'react' || !canPlay(card);
+      // 应对卡（格挡等）不能在己方出招阶段主动打出，只能在敌方攻击时由提示触发；
+      // 本阶段已休整的，手牌全部锁住（休整与打招式卡只能二选一）
+      const dis = state.phase !== 'attack' || card.type === 'react' || state.rested || !canPlay(card);
       const div = document.createElement('div');
       div.className = 'card' + (state.selectedCard === card ? ' sel' : '') + (dis ? ' dis' : '');
       div.innerHTML =
@@ -1112,7 +1122,7 @@
   function renderButtons() {
     // 休整（规则书 §4.2.2）：出招阶段且本阶段未打出任何招式卡，即可收回弃牌堆；不要求手牌为空
     document.getElementById('btnRest').disabled =
-      !(state.phase === 'attack' && !state.attackPlayed && player.discard.length > 0);
+      !(state.phase === 'attack' && !state.attackPlayed && !state.rested && player.discard.length > 0);
     const adjacent = hexDist(player.pos, jiChang.pos) === 1;
     document.getElementById('btnEscort').disabled = !(state.phase === 'interact' && adjacent && jiChang.hp > 0);
     document.getElementById('btnCat').disabled = !(state.phase === 'interact' && (!spiritCat || !spiritCat.used));
@@ -1188,11 +1198,13 @@
     board.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
     document.getElementById('btnEnd').addEventListener('click', endPhase);
     document.getElementById('btnRest').addEventListener('click', () => {
-      if (state.phase !== 'attack' || state.attackPlayed || player.discard.length === 0) return;
+      if (state.phase !== 'attack' || state.attackPlayed || state.rested || player.discard.length === 0) return;
       player.hand = player.discard; player.discard = [];
-      log('石友休整：收回全部招式', 'hit');
-      state.attackPlayed = true; render();
-      scheduleAttackAutoAdvance(800);
+      // 休整与打招式卡只能二选一：休整后本阶段手牌全部锁住，收回的牌留到下个回合再用
+      state.rested = true; state.selectedCard = null; state.catMode = false;
+      log('石友休整：收回全部招式（本阶段不能再打出招式卡）', 'hit');
+      render();
+      scheduleAttackAutoAdvance(900);
     });
     document.getElementById('btnEscort').addEventListener('click', () => {
       if (state.phase === 'interact' && hexDist(player.pos, jiChang.pos) === 1) stepJiChang();
@@ -1272,13 +1284,13 @@
     phaseLock = false;
     freshState(); resetActionDeck();
     state.phase = 'move'; state.turn = 1; state.status = 'playing'; state.msg = '';
-    state.selectedCard = null; state.attackPlayed = false; state.busy = false; state.catMode = false; state.log = [];
+    state.selectedCard = null; state.attackPlayed = false; state.rested = false; state.busy = false; state.catMode = false; state.log = [];
     render();
   }
   function init() {
     freshState(); resetActionDeck();
     state.phase = 'move'; state.turn = 1; state.status = 'playing'; state.msg = '';
-    state.selectedCard = null; state.attackPlayed = false; state.busy = false; state.catMode = false; state.log = [];
+    state.selectedCard = null; state.attackPlayed = false; state.rested = false; state.busy = false; state.catMode = false; state.log = [];
     log('【第一章·地牢】护送姬昌回到任意玩家起点（卒）即胜利。', 'win');
     log('石友装备：生锈的长枪（枪）、布衣、琥珀串珠（灵猫）。', 'hit');
     log('属性按 §3.1.3 求和：武力2 / 内力1 / 灵力0 / 体力2 → 生命14 / 移动2。', 'hit');

@@ -51,6 +51,10 @@ main{display:grid;grid-template-columns:1fr 360px;gap:20px;align-items:start}
 .hex.tgt{fill:rgba(214,84,72,.55);stroke:var(--tgt);stroke-width:2.2;cursor:crosshair}
 .hex.cat-reach{fill:rgba(140,200,230,.55);stroke:var(--jade);stroke-width:2;cursor:pointer}
 .hex.cat-tgt{fill:rgba(230,150,90,.65);stroke:#d97e2c;stroke-width:2.2;cursor:crosshair}
+.hex.cat-spawn{fill:rgba(140,200,230,.42);stroke:#8fd6ff;stroke-width:2.6;stroke-dasharray:7 5;cursor:pointer}
+@keyframes catSpawnPulse{0%,100%{fill:rgba(140,200,230,.28)}50%{fill:rgba(140,200,230,.62)}}
+.hex.cat-spawn{animation:catSpawnPulse 1.4s ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){.hex.cat-spawn{animation:none}}
 .unit-circle{stroke:#000;stroke-width:3;cursor:help}
 .u-player{fill:var(--seal)}
 .u-ji{fill:var(--jade)}

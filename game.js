@@ -438,10 +438,10 @@
     if (!spiritCat || !spiritCat.alive) return false;
     // 不能落点于敌人或同伴（石友/姬昌）所在格
     if (isOccupied(c)) return false;
-    const d = hexDist(spiritCat.pos, c);
-    if (d > spiritCat.moveLeft || d === 0) return false;
+    // 按实际行走格数（路径长度）判断，而不是直线距离
     const p = pathTo(spiritCat.pos, c);
-    return !!p;
+    if (!p || p.length === 0) return false;
+    return p.length <= spiritCat.moveLeft;
   }
   async function catAtk(en) {
     if (!spiritCat || !spiritCat.alive || !en || !en.alive) return;
@@ -459,7 +459,9 @@
   async function stepCat(toC) {
     if (!spiritCat || state.busy) return;
     if (isOccupied(toC)) { log('通灵猫不能进入已被占据的格子', 'bad'); return; }
-    const dist = hexDist(spiritCat.pos, toC);
+    // 每走一格扣 1 点移动力：按实际路径格数（绕障也按格计）
+    const catPath = pathTo(spiritCat.pos, toC);
+    const dist = catPath && catPath.length ? catPath.length : hexDist(spiritCat.pos, toC);
     if (dist > spiritCat.moveLeft || dist === 0) return;
     state.busy = true;
     const from = { col: spiritCat.pos.col, row: spiritCat.pos.row };
@@ -683,8 +685,11 @@
     if (state.busy) return;
     state.busy = true;
     const from = { col: player.pos.col, row: player.pos.row };
+    // 每走一格扣 1 点移动力：按实际行走步数（BFS 路径长度，绕障也按格计），而非每次行动只扣 1 点
+    const walkPath = pathTo(from, c);
+    const walkCost = walkPath && walkPath.length ? walkPath.length : hexDist(from, c);
     player.pos = { col: c.col, row: c.row };
-    player.panel.moveLeft -= 1;
+    player.panel.moveLeft -= walkCost;
     await animateMove('p', from, player.pos);
     const cell = cellAt(c);
     if (cell.feature === 'marker' && cell.markerType === 'heal') {

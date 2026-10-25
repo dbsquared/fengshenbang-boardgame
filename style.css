@@ -31,6 +31,7 @@ header{display:flex;align-items:center;justify-content:space-between;gap:16px;fl
 .statusbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .badge{background:var(--seal);color:#fff;padding:5px 14px;border-radius:20px;font-size:15px;letter-spacing:2px}
 .turn{color:var(--ink-dim);font-size:15px}
+.ver{color:var(--ink-dim);font-size:11px;opacity:.62;letter-spacing:1px}
 .banner{font-size:18px;font-weight:700;padding:4px 12px;border-radius:6px}
 .banner.win{color:#fff;background:linear-gradient(90deg,var(--gold),#8a6d2b)}
 .banner.lose{color:#fff;background:linear-gradient(90deg,var(--seal),var(--seal2))}

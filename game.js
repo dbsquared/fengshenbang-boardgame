@@ -281,7 +281,7 @@
   // 默认严格遵循说明书原规则：不擅自改动任何属性。
   // 姬昌 1 血 / 每回合 1 格；小兵 4 只；内力 1；小兵无限复活。
   // 下方开关为「偏离原规则的辅助」，默认全部关闭，需用户主动勾选才生效。
-  const ASSIST = { enabled: false, reviveLimit: 999, jiHpAssist: false, drill: false, soloScale: false, jiStep2: false, neiAssist: false };
+  const ASSIST = { enabled: false, reviveLimit: 999, jiHpAssist: false, drill: false, soloScale: false, neiAssist: false };
   // 姬昌生命：原规则 1（剧情卡 setup「1 枚数值为 1 的生命值标记」）；辅助模式下 6
   // （护送全程 8~9 步，弓兵射程 3 且优先攻击他，1 血必被点杀）。
   function jiHp() { return (ASSIST.enabled && ASSIST.jiHpAssist) ? 12 : 1; }
@@ -321,6 +321,7 @@
     phase: 'move', turn: 1, status: 'playing', msg: '', busy: false,
     selectedCard: null, attackPlayed: false, rested: false, catMode: false, catSummon: false, catStep: 0,
     feitui: null,   // 位移类招式（飞踢/回马枪）的两阶段流程：{ stage:'move'|'target', card }
+    jiMoved: false, // 本回合是否已执行过同伴行动（姬昌每回合只能移动 1 步）
     reachSet: new Set(), tgtSet: new Set(), log: [],
   };
   const PHASE_NAME = { move: '移动阶段', attack: '出招阶段', interact: '交互阶段', enemy: '敌方行动' };
@@ -778,28 +779,23 @@
   /* ---------------- 姬昌护送 ---------------- */
   function stepJiChang() {
     if (!jiChang.found) { log('尚未找到姬昌，先走到牢房相邻格', 'bad'); render(); return; }
+    // 用户明确：姬昌每回合只能移动 1 步（交互阶段「同伴行动」每回合仅 1 次，§4.3）
+    if (state.jiMoved) { log('本回合已护送过姬昌，他每回合只能移动 1 步', 'bad'); render(); return; }
     const sorted = goals.slice().sort((a, b) => hexDist(jiChang.pos, a) - hexDist(jiChang.pos, b));
     const goal = sorted[0];
     const path = pathTo(jiChang.pos, goal);
     if (path && path.length) {
-      // 辅助：姬昌每回合走 2 格（同伴行动卡数据缺失；护送全程 8 步否则过慢）
-      const steps = (ASSIST.enabled && ASSIST.jiStep2) ? Math.min(2, path.length) : 1;
-      let moved = 0;
-      for (let i = 0; i < steps; i++) {
-        const p2 = pathTo(jiChang.pos, goal);
-        if (!p2 || !p2.length) break;
-        const step = p2[0];
-        if (isOccupied(step)) { log('姬昌被挡住，无法前进', 'bad'); break; }
-        jiChang.pos = { col: step.col, row: step.row };
-        moved += 1;
-      }
-      if (moved) log('姬昌向起点（卒）移动 ' + moved + ' 格', 'hit');
+      const step = path[0];
+      if (isOccupied(step)) { log('姬昌被挡住，无法前进', 'bad'); render(); return; }
+      jiChang.pos = { col: step.col, row: step.row };
+      state.jiMoved = true;          // 本回合的同伴行动已用完
+      log('姬昌向起点（卒）移动 1 格', 'hit');
     } else log('姬昌无路可走', 'bad');
     checkEnd(); render();
   }
-  // 交互阶段是否还有可执行的「同伴行动」（护送姬昌）
+  // 交互阶段是否还有可执行的「同伴行动」（护送姬昌）——本回合未用过才算
   function canEscortNow() {
-    return state.status === 'playing' && jiChang.found && jiChang.hp > 0 &&
+    return state.status === 'playing' && !state.jiMoved && jiChang.found && jiChang.hp > 0 &&
            hexDist(player.pos, jiChang.pos) === 1;
   }
 
@@ -902,6 +898,7 @@
     stopAttackAutoAdvance();         // 新回合开始，清掉上一阶段残留的自动跳转
     state.turn += 1; state.phase = 'move';
     state.rested = false; state.attackPlayed = false;
+    state.jiMoved = false;           // 新回合：同伴行动恢复可用（姬昌每回合 1 步）
     player.panel.moveLeft = player.panel.move;
     player.panel.neiLeft = player.panel.nei;
     player.blockNext = false; state.busy = false; state.catMode = false; state.catSummon = false; state.feitui = null;
@@ -1292,7 +1289,7 @@
     document.getElementById('btnRest').disabled =
       !(state.phase === 'attack' && !state.attackPlayed && !state.rested && player.discard.length > 0);
     const adjacent = hexDist(player.pos, jiChang.pos) === 1;
-    document.getElementById('btnEscort').disabled = !(state.phase === 'interact' && adjacent && jiChang.hp > 0);
+    document.getElementById('btnEscort').disabled = !(state.phase === 'interact' && adjacent && jiChang.hp > 0 && !state.jiMoved);
     document.getElementById('btnCat').disabled = !(state.phase === 'interact' && (!spiritCat || !spiritCat.used));
     document.getElementById('btnEnd').disabled = state.busy || phaseLock || state.status !== 'playing';
   }
@@ -1379,7 +1376,7 @@
       scheduleAttackAutoAdvance(900);
     });
     document.getElementById('btnEscort').addEventListener('click', () => {
-      if (state.phase === 'interact' && hexDist(player.pos, jiChang.pos) === 1) stepJiChang();
+      if (state.phase === 'interact' && !state.jiMoved && hexDist(player.pos, jiChang.pos) === 1) stepJiChang();
     });
     document.getElementById('btnCat').addEventListener('click', () => {
       if (state.phase !== 'interact') return;
@@ -1457,13 +1454,13 @@
     phaseLock = false;
     freshState(); resetActionDeck();
     state.phase = 'move'; state.turn = 1; state.status = 'playing'; state.msg = '';
-    state.selectedCard = null; state.attackPlayed = false; state.rested = false; state.busy = false; state.catMode = false; state.catSummon = false; state.feitui = null; state.log = [];
+    state.selectedCard = null; state.attackPlayed = false; state.rested = false; state.busy = false; state.catMode = false; state.catSummon = false; state.feitui = null; state.jiMoved = false; state.log = [];
     render();
   }
   function init() {
     freshState(); resetActionDeck();
     state.phase = 'move'; state.turn = 1; state.status = 'playing'; state.msg = '';
-    state.selectedCard = null; state.attackPlayed = false; state.rested = false; state.busy = false; state.catMode = false; state.catSummon = false; state.feitui = null; state.log = [];
+    state.selectedCard = null; state.attackPlayed = false; state.rested = false; state.busy = false; state.catMode = false; state.catSummon = false; state.feitui = null; state.jiMoved = false; state.log = [];
     log('【第一章·地牢】护送姬昌回到任意玩家起点（卒）即胜利。', 'win');
     log('石友装备：生锈的长枪（枪）、布衣、琥珀串珠（灵猫）。', 'hit');
     log('属性按 §3.1.3 求和：武力2 / 内力1 / 灵力0 / 体力2 → 生命14 / 移动2。', 'hit');

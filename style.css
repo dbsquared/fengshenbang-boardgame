@@ -38,7 +38,8 @@ header{display:flex;align-items:center;justify-content:space-between;gap:16px;fl
 
 main{display:grid;grid-template-columns:1fr 360px;gap:20px;align-items:start}
 .board-wrap{background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:14px;box-shadow:var(--shadow);min-width:0}
-#board{width:100%;height:auto;display:block;touch-action:manipulation;background:#1a1410;border-radius:6px}
+#board{width:100%;height:auto;display:block;touch-action:manipulation;background:#1a1410;border-radius:6px;
+  -webkit-touch-callout:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
 /* 实景底图：第一章·地牢版图原图（岩壁/铁链/壁龛/灯笼） */
 .board-bg{opacity:1}
 /* 压暗层：保证棋子在暗色底图上仍可读 */
@@ -65,8 +66,8 @@ main{display:grid;grid-template-columns:1fr 360px;gap:20px;align-items:start}
 .unit-label{fill:#fff;font-size:96px;text-anchor:middle;dominant-baseline:central;pointer-events:none;font-weight:700;paint-order:stroke;stroke:rgba(0,0,0,.55);stroke-width:10}
 .unit-hp{fill:#ffe2b8;font-size:40px;text-anchor:middle;pointer-events:none;font-weight:700;paint-order:stroke;stroke:rgba(0,0,0,.8);stroke-width:8}
 
-/* 单位悬停信息卡 */
-#unitTip{position:fixed;display:none;z-index:60;max-width:280px;background:rgba(22,16,10,.95);border:1px solid #a8452e;border-radius:8px;padding:10px 13px;color:#efe3cd;font-size:13px;line-height:1.6;pointer-events:none;box-shadow:0 6px 18px rgba(0,0,0,.55)}
+/* 单位信息卡：桌面 hover 跟随鼠标 / 移动端长按弹出（见 game.js 的长按逻辑） */
+#unitTip{position:fixed;display:none;z-index:60;max-width:min(280px,74vw);background:rgba(22,16,10,.96);border:1px solid #a8452e;border-radius:8px;padding:10px 13px;color:#efe3cd;font-size:13px;line-height:1.6;pointer-events:none;box-shadow:0 6px 18px rgba(0,0,0,.55)}
 #unitTip b{color:#ffd9a0;font-size:14px}
 #unitTip .tip-dim{color:#b8a888;font-size:12px}
 .exit-glow{fill:none;stroke:var(--seal);stroke-width:1;opacity:.5}

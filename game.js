@@ -211,6 +211,8 @@
   const HERO_DEFS = {
     shiyou: {
       id: 'shiyou', name: '石友', char: '石', tag: '枪 · 召唤', portrait: '素材原图/石友头像.jpg',
+      // 头像取景：石友原图是竖版卡牌照片，上缘有桌面，需下移取景；其余三位已裁到标题线以下，从上沿起。
+      portraitPos: 'center 22%',
       equip: [
         { name: '生锈的长枪', type: '武器', weapon: '枪', img: '素材原图/装备卡-生锈的长枪.png', colors: { wu: 1, nei: 0, ling: 0, ti: 1 } },
         { name: '布衣', type: '防具', weapon: '', img: '素材原图/装备卡-布衣.png', colors: { wu: 0, nei: 1, ling: 0, ti: 0 } },
@@ -220,7 +222,8 @@
       role: '前排肉盾 / 灵兽召唤：血量最高（14），靠「调息」续航，用通灵猫远程骚扰。',
     },
     chenxuan: {
-      id: 'chenxuan', name: '陈玄', char: '玄', tag: '弓 · 毒', portrait: '',
+      id: 'chenxuan', name: '陈玄', char: '玄', tag: '弓 · 毒', portrait: '素材原图/陈玄头像.jpg',
+      portraitPos: 'center top',
       equip: [
         { name: '积灰的弓', type: '武器', weapon: '弓', img: '', colors: { wu: 0, nei: 1, ling: 0, ti: 0 } },
         { name: '布衣', type: '防具', weapon: '', img: '', colors: { wu: 0, nei: 1, ling: 0, ti: 0 } },
@@ -230,7 +233,8 @@
       role: '远程游击 / 上毒：射程 2~3，靠位移与「翻滚」保命；血最薄（8），必须卡距离。',
     },
     maoying: {
-      id: 'maoying', name: '毛颖', char: '颖', tag: '剑 · 位移', portrait: '',
+      id: 'maoying', name: '毛颖', char: '颖', tag: '剑 · 位移', portrait: '素材原图/毛颖头像.jpg',
+      portraitPos: 'center top',
       equip: [
         { name: '青铜剑', type: '武器', weapon: '剑', img: '', colors: { wu: 2, nei: 0, ling: 0, ti: 0 } },
         { name: '布衣', type: '防具', weapon: '', img: '', colors: { wu: 0, nei: 1, ling: 0, ti: 0 } },
@@ -240,7 +244,8 @@
       role: '近战爆发 / 破阵：武力 3 打点最高，配合「乾坤斗转」眩晕后靠护腕追伤。',
     },
     fangxu: {
-      id: 'fangxu', name: '方絮', char: '絮', tag: '符法 · 控场', portrait: '',
+      id: 'fangxu', name: '方絮', char: '絮', tag: '符法 · 控场', portrait: '素材原图/方絮头像.jpg',
+      portraitPos: 'center top',
       equip: [
         { name: '拂尘', type: '武器', weapon: '软兵', img: '', colors: { wu: 0, nei: 0, ling: 2, ti: 0 } },
         { name: '布衣', type: '防具', weapon: '', img: '', colors: { wu: 0, nei: 1, ling: 0, ti: 0 } },
@@ -2148,7 +2153,16 @@
       const div = document.createElement('div');
       div.className = 'hs-card';
       div.tabIndex = 0;
-      div.innerHTML = '<div class="hs-char">' + h.char + '</div>' +
+      // 有头像用头像，没有则退回首字徽章。
+      // 素材取自「角色面板」实物照片，插画上缘压着面板自带的「武器」栏目标题：
+      // 三位新角色的取景框已压到标题线以下（portraitPos = center top），标题不入画；
+      // 顶上再叠一层极轻的渐变压暗（.hs-veil）柔化切边。
+      const avatar = h.portrait
+        ? '<div class="hs-thumb"><img class="hs-avatar" src="' + h.portrait + '" alt="' + h.name +
+          '" style="object-position:' + (h.portraitPos || 'center 22%') + '"/>' +
+          '<span class="hs-veil"></span></div>'
+        : '<div class="hs-char">' + h.char + '</div>';
+      div.innerHTML = avatar +
         '<div class="hs-name">' + h.name + '</div>' +
         '<div class="hs-tag">' + h.tag + '</div>' +
         '<div class="hs-role">' + h.role + '</div>' + heroStatHtml(h);

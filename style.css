@@ -275,3 +275,35 @@ button.primary:hover:not(:disabled){background:var(--seal2)}
 @media (prefers-reduced-motion: reduce){
   .rp-box{ animation-duration: .01ms; }
 }
+
+/* ---------------- 角色选择（四主角） ---------------- */
+.hero-select{ position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center;
+  padding:24px; overflow:auto;
+  background:radial-gradient(circle at 50% 38%, rgba(34,25,16,.93), rgba(8,6,4,.975)); }
+.hero-select.hidden{ display:none; }
+.hs-box{ width:min(940px,96vw); padding:22px 22px 18px; border:1px solid var(--line); border-radius:14px;
+  background:linear-gradient(180deg,#211a13,#161009); box-shadow:0 26px 64px rgba(0,0,0,.62); }
+.hs-kicker{ font-size:12px; letter-spacing:.3em; color:var(--gold); }
+.hs-box h2{ margin:8px 0 16px; font-size:22px; font-weight:600; letter-spacing:.06em; color:var(--ink); }
+.hs-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+@media (max-width:780px){ .hs-grid{ grid-template-columns:repeat(2,1fr); } }
+.hs-card{ position:relative; cursor:pointer; padding:12px; border:1px solid var(--line); border-radius:12px;
+  background:linear-gradient(180deg,rgba(58,44,30,.92),rgba(28,22,15,.96)); transition:transform .16s, border-color .16s, box-shadow .16s; }
+.hs-card:hover{ transform:translateY(-3px); border-color:var(--gold); box-shadow:0 12px 28px rgba(0,0,0,.55); }
+.hs-card:focus-visible{ outline:2px solid var(--gold); outline-offset:2px; }
+.hs-char{ display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px; margin-bottom:8px;
+  border:1px solid var(--gold); border-radius:50%; background:#2a2016; color:#f6e7c6; font-size:18px; }
+.hs-name{ font-size:18px; font-weight:600; color:var(--ink); }
+.hs-tag{ margin:2px 0 8px; font-size:12px; color:var(--gold); }
+.hs-role{ min-height:62px; font-size:12px; line-height:1.6; color:var(--ink-dim); }
+.hs-stats{ display:grid; grid-template-columns:repeat(2,1fr); gap:4px; margin-top:10px; font-size:12px; color:#cdbfa8; }
+.hs-stats b{ color:var(--ink); font-weight:600; }
+.hs-tip{ margin-top:14px; font-size:12px; line-height:1.65; color:#8d7c66; }
+.hero-portrait.hero-char{ display:flex; align-items:center; justify-content:center; width:56px; height:56px;
+  border:1px solid var(--gold); border-radius:50%; background:#2a2016; color:#f6e7c6; font-size:24px; }
+.eq-ph{ display:flex; align-items:center; justify-content:center; min-height:80px; border-radius:8px;
+  background:#3a2f24; color:var(--gold); font-size:13px; letter-spacing:.08em; }
+
+/* 单位身上的负面状态角标（眩晕 / 中毒 / 减速） */
+.unit-status{ fill:#ffcf5c; font-size:34px; font-weight:700; text-anchor:middle;
+  paint-order:stroke; stroke:#150e07; stroke-width:7px; stroke-linejoin:round; pointer-events:none; }

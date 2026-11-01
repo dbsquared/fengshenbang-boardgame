@@ -833,7 +833,11 @@
     dealDamage(target, dmg);
     log(e.name + '攻击' + target.name + '，造成' + dmg + '点伤害', 'bad');
     if (target === player) {
-      if (player.panel.hp <= 0) { player.panel.hp = 0; player.alive = false; }
+      if (player.panel.hp <= 0) {
+        player.panel.hp = 0; player.alive = false;
+        // 阵亡演出：此时石友的 <g> 还在 DOM 里，播完再由调用方的 render() 移除
+        await playPlayerDeath(target.pos);
+      }
     } else if (target === spiritCat) {
       // 通灵猫生命归零：直接离场，且本局不能再召唤（琥珀串珠的召唤只生效一次）
       if (spiritCat.hp <= 0) {
@@ -1169,6 +1173,59 @@
       ).finished.catch(function(){ return undefined; }));
     }
     if (dmg > 0) proms.push(floatText(toPos, '-' + dmg, '#ff6b6b'));
+    await Promise.all(proms);
+  }
+  /* 石友阵亡演出 --------------------------------------------------------------
+   * 必须在最后一次 render() 之前调用：render 会按 alive=false 把石友从 SVG 里移除，
+   * 之后就拿不到它的 <g> 了。组成：两道红色冲击波 + 单位亮闪→下坠灰化消散 +
+   * 棋盘轻震 + 暗红罩层 + 飘字「石友阵亡」。
+   */
+  async function playPlayerDeath(pos) {
+    const svg = document.getElementById('board');
+    const stage = document.querySelector('.board-stage');
+    const g = unitG('p');
+    const c = centerPx(pos);
+    const proms = [];
+    // 冲击波（两环错开 150ms；延迟期间保持不可见，避免第二环提前闪一下）
+    [0, 150].forEach(function (delay) {
+      const ring = document.createElementNS(SVGNS, 'circle');
+      ring.setAttribute('cx', c.x); ring.setAttribute('cy', c.y);
+      ring.setAttribute('r', SIZE * 0.5);
+      ring.setAttribute('class', 'death-ring');
+      ring.setAttribute('stroke-width', '8');
+      ring.style.opacity = '0';
+      svg.appendChild(ring);
+      proms.push(ring.animate([
+        { transform: 'scale(.4)', opacity: '.95', strokeWidth: '10px' },
+        { transform: 'scale(2.3)', opacity: '0', strokeWidth: '1px' },
+      ], { duration: 820, delay: delay, easing: 'cubic-bezier(.2,.7,.3,1)' })
+        .finished.catch(function () { return undefined; })
+        .then(function () { ring.remove(); }));
+    });
+    // 单位：先被打得发亮，再下坠、缩小、灰化、消散
+    if (g) {
+      proms.push(g.animate([
+        { transform: 'translate(0,0) scale(1)', filter: 'grayscale(0) brightness(1)', opacity: 1 },
+        { transform: 'translate(0,' + (SIZE * 0.06) + 'px) scale(1.1)', filter: 'grayscale(0) brightness(2.2)', opacity: 1, offset: .16 },
+        { transform: 'translate(0,' + (SIZE * 0.5) + 'px) scale(.7) rotate(-16deg)', filter: 'grayscale(1) brightness(.45)', opacity: 0 },
+      ], { duration: 900, easing: 'cubic-bezier(.45,0,.75,1)', fill: 'forwards' })
+        .finished.catch(function () { return undefined; }));
+    }
+    // 棋盘轻震 + 暗红罩层
+    if (stage) {
+      stage.classList.add('death-shake');
+      const veil = document.createElement('div');
+      veil.className = 'death-veil';
+      stage.appendChild(veil);
+      proms.push(new Promise(function (res) {
+        setTimeout(function () {
+          stage.classList.remove('death-shake');
+          if (veil.parentNode) veil.remove();
+          res();
+        }, 1100);
+      }));
+    }
+    proms.push(floatText(pos, '石友阵亡', '#ff5a4a'));
     await Promise.all(proms);
   }
 

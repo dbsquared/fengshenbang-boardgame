@@ -895,10 +895,10 @@
     } else log('姬昌无路可走', 'bad');
     checkEnd(); render();
   }
-  // 交互阶段是否还有可执行的「同伴行动」（护送姬昌）——本回合未用过才算
+  // 交互阶段是否还有可执行的「同伴行动」（护送姬昌）——本回合未用过才算。
+  // 用户明确（2026-11-01）：即使姬昌不在石友旁边也可以护送，因此不再判定相邻。
   function canEscortNow() {
-    return state.status === 'playing' && !state.jiMoved && jiChang.found && jiChang.hp > 0 &&
-           hexDist(player.pos, jiChang.pos) === 1;
+    return state.status === 'playing' && !state.jiMoved && jiChang.found && jiChang.hp > 0;
   }
 
   /* ---------------- 阶段切换动画（大地图覆盖层） ---------------- */
@@ -1374,7 +1374,7 @@
     } else if (cls === 'u-ji') {
       h += '<b>姬昌</b>（护送目标）<br>';
       h += '生命 ' + u.hp + '/' + u.maxHp + '　状态：' + (u.found ? '已加入队伍' : '<b>未发现</b>（锁在牢房，敌方无法以他为目标）') + '<br>';
-      h += '<span class="tip-dim">无战斗力。走到他相邻格即触发剧情「找到姬昌」；之后石友相邻时点「护送姬昌」让他向最近的「卒」移动一格，抵达任意「卒」格即胜利。<br>注意：说明书 P22——若姬昌与玩家同时进入敌方射程，<b>敌方优先攻击姬昌</b>。</span>';
+      h += '<span class="tip-dim">无战斗力。走到他相邻格即触发剧情「找到姬昌」；之后在交互阶段点「护送姬昌」即可让他向最近的「卒」移动一格（<b>不需要石友站在他旁边</b>），抵达任意「卒」格即胜利。<br>注意：说明书 P22——若姬昌与玩家同时进入敌方射程，<b>敌方优先攻击姬昌</b>。</span>';
     } else if (cls === 'u-cat') {
       h += '<b>灵兽 · 通灵猫</b><br>';
       h += '生命 ' + u.hp + '/' + u.maxHp + '（灵兽卡 4P-11）<br>';
@@ -1449,8 +1449,10 @@
     // 休整（规则书 §4.2.2）：出招阶段且本阶段未打出任何招式卡，即可收回弃牌堆；不要求手牌为空
     document.getElementById('btnRest').disabled =
       !(state.phase === 'attack' && !state.attackPlayed && !state.rested && player.discard.length > 0);
-    const adjacent = hexDist(player.pos, jiChang.pos) === 1;
-    document.getElementById('btnEscort').disabled = !(state.phase === 'interact' && adjacent && jiChang.hp > 0 && !state.jiMoved);
+    // 护送姬昌：不再要求石友与姬昌相邻（用户明确「即使姬昌不在玩家旁边也可以移动」）
+    document.getElementById('btnEscort').disabled =
+      !(state.phase === 'interact' && state.status === 'playing' &&
+        jiChang.found && jiChang.hp > 0 && !state.jiMoved);
     document.getElementById('btnCat').disabled = !canSummonCat();
     document.getElementById('btnEnd').disabled = state.busy || phaseLock || state.status !== 'playing';
   }
@@ -1591,7 +1593,7 @@
       scheduleAttackAutoAdvance(900);
     });
     document.getElementById('btnEscort').addEventListener('click', () => {
-      if (state.phase === 'interact' && !state.jiMoved && hexDist(player.pos, jiChang.pos) === 1) stepJiChang();
+      if (state.phase === 'interact' && !state.jiMoved) stepJiChang();
     });
     document.getElementById('btnCat').addEventListener('click', () => {
       if (state.phase !== 'interact') return;

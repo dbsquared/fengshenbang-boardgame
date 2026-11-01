@@ -191,51 +191,143 @@
     return out;
   }
 
-  /* ---------------- 石友真实初始属性（按装备卡颜色数字之和 §3.1.3） ----------------
-   * 由 石友角色卡包-正面.jpg 三张装备卡逐格裁出，卡面红/绿/蓝/橙 圆框数字：
-   *   生锈的长枪 (武器·枪)  → 红1 绿0 蓝0 橙1   (武力1 内力0 灵力0 体力1)   被动/主动: 无特殊效果
-   *   布衣        (防具)     → 红0 绿1 蓝0 橙0   (武力0 内力1 灵力0 体力0)   被动/主动: 无特殊效果
-   *   琥珀串珠   (宝物)     → 红1 绿0 蓝0 橙1   (武力1 内力0 灵力0 体力1)
-   *     · 主动技能: 承受 体力+3 伤害 (派猫时代为受击)
-   *     · 图腾:    召唤 灵兽·通灵猫 (交互阶段可召)
-   * 合计: 武力2 / 内力1 / 灵力0 / 体力2
-   * 生命 = 8 + 体力×3 = 14
-   * 移动 = 2 (本套装无 +移 加成)
+  /* ================= 四位主角（数据来自角色卡包实物卡裁读 2026-11-01） =================
+   * 属性 = 三件装备卡红/绿/蓝/橙数字之和（规则书 §3.1.3）；生命 = 8 + 体力×3；移动 = 2 + 装备加成。
+   * 每名角色只能穿戴 3 件装备（规则书 §6.1），故只登记各角色卡包中真正上身的 3 件。
+   *
+   * 石友   生锈的长枪(枪, 红1绿0蓝0橙1) + 布衣(0/1/0/0) + 琥珀串珠(1/0/0/1) → 武2 内1 灵0 体2 → HP14 移2
+   * 陈玄   积灰的弓(弓, 0/1/0/0) + 布衣(0/1/0/0) + 锋利的匕首(0/0/0/0, 移动+1) → 武0 内2 灵0 体0 → HP8  移3
+   *        （卡包里第 4 张「翡翠腰牌」编号 1-25，属章节奖励卡，不计入初始装备）
+   * 毛颖   青铜剑(剑, 2/0/0/0) + 布衣(0/1/0/0) + 巧劲护腕(1/0/0/1) → 武3 内1 灵0 体1 → HP11 移2
+   * 方絮   拂尘(软兵, 0/0/2/0) + 布衣(0/1/0/0) + 三清铃(0/1/0/0) → 武0 内2 灵2 体0 → HP8  移2
+   *
+   * 被动技能（装备卡底部黑框原文）：
+   *   琥珀串珠  承受 体力+3 伤害；图腾：召唤灵兽·通灵猫
+   *   巧劲护腕  对处于负面状态的敌方单位造成的伤害额外 +1
+   *   三清铃    为自身或其他玩家恢复生命值时，清除其所有负面状态
+   *   锋利的匕首 移动力+1；可以使用「匕」专属招式
+   *   翡翠腰牌  防具栏可穿戴武器（本原型未启用，见上）
    */
-  const EQUIPMENT = [
-    { key: 'spear', name: '生锈的长枪', type: '武器', weapon: '枪', img: '素材原图/装备卡-生锈的长枪.png',
-      colors: { wu: 1, nei: 0, ling: 0, ti: 1 } },
-    { key: 'cloth', name: '布衣', type: '防具', weapon: '', img: '素材原图/装备卡-布衣.png',
-      colors: { wu: 0, nei: 1, ling: 0, ti: 0 } },
-    { key: 'amber', name: '琥珀串珠', type: '宝物', weapon: '', img: '素材原图/装备卡-琥珀串珠.png',
-      colors: { wu: 1, nei: 0, ling: 0, ti: 1 }, moveBonus: 0, absorb: 3, beast: '灵猫' },
-  ];
-  function sumEquipment() {
-    const t = { wu: 0, nei: 0, ling: 0, ti: 0 };
-    EQUIPMENT.forEach(e => { t.wu += e.colors.wu; t.nei += e.colors.nei; t.ling += e.colors.ling; t.ti += e.colors.ti; });
-    let moveBonus = 0;
-    EQUIPMENT.forEach(e => { if (e.moveBonus) moveBonus += e.moveBonus; });
-    return { ...t, moveBonus };
-  }
-  const _sum = sumEquipment();
-  const PLAYER_BASE = {
-    wu: _sum.wu, nei: _sum.nei, ling: _sum.ling, ti: _sum.ti,
-    hp: 8 + _sum.ti * 3, move: 2 + _sum.moveBonus,
+  const HERO_DEFS = {
+    shiyou: {
+      id: 'shiyou', name: '石友', char: '石', tag: '枪 · 召唤', portrait: '素材原图/石友头像.jpg',
+      equip: [
+        { name: '生锈的长枪', type: '武器', weapon: '枪', img: '素材原图/装备卡-生锈的长枪.png', colors: { wu: 1, nei: 0, ling: 0, ti: 1 } },
+        { name: '布衣', type: '防具', weapon: '', img: '素材原图/装备卡-布衣.png', colors: { wu: 0, nei: 1, ling: 0, ti: 0 } },
+        { name: '琥珀串珠', type: '宝物', weapon: '', img: '素材原图/装备卡-琥珀串珠.png', colors: { wu: 1, nei: 0, ling: 0, ti: 1 }, absorb: 3, beast: '灵猫' },
+      ],
+      deck: ['tunci', 'yongtui', 'lianhuan', 'gedang', 'feitui', 'tiaoxi', 'huima'],
+      role: '前排肉盾 / 灵兽召唤：血量最高（14），靠「调息」续航，用通灵猫远程骚扰。',
+    },
+    chenxuan: {
+      id: 'chenxuan', name: '陈玄', char: '玄', tag: '弓 · 毒', portrait: '',
+      equip: [
+        { name: '积灰的弓', type: '武器', weapon: '弓', img: '', colors: { wu: 0, nei: 1, ling: 0, ti: 0 } },
+        { name: '布衣', type: '防具', weapon: '', img: '', colors: { wu: 0, nei: 1, ling: 0, ti: 0 } },
+        { name: '锋利的匕首', type: '宝物', weapon: '匕', img: '', colors: { wu: 0, nei: 0, ling: 0, ti: 0 }, moveBonus: 1 },
+      ],
+      deck: ['suse', 'xuli', 'fanggun', 'yongtui2', 'jianshan_cx', 'qiankun', 'feidao', 'yixing', 'dubiao', 'qingren'],
+      role: '远程游击 / 上毒：射程 2~3，靠位移与「翻滚」保命；血最薄（8），必须卡距离。',
+    },
+    maoying: {
+      id: 'maoying', name: '毛颖', char: '颖', tag: '剑 · 位移', portrait: '',
+      equip: [
+        { name: '青铜剑', type: '武器', weapon: '剑', img: '', colors: { wu: 2, nei: 0, ling: 0, ti: 0 } },
+        { name: '布衣', type: '防具', weapon: '', img: '', colors: { wu: 0, nei: 1, ling: 0, ti: 0 } },
+        { name: '巧劲护腕', type: '宝物', weapon: '', img: '', colors: { wu: 1, nei: 0, ling: 0, ti: 1 }, bonusVsDebuff: 1 },
+      ],
+      deck: ['shenxing', 'qiankun', 'quanli', 'shangtiao', 'gedang_ti', 'hengzhan', 'jianshan_my'],
+      role: '近战爆发 / 破阵：武力 3 打点最高，配合「乾坤斗转」眩晕后靠护腕追伤。',
+    },
+    fangxu: {
+      id: 'fangxu', name: '方絮', char: '絮', tag: '符法 · 控场', portrait: '',
+      equip: [
+        { name: '拂尘', type: '武器', weapon: '软兵', img: '', colors: { wu: 0, nei: 0, ling: 2, ti: 0 } },
+        { name: '布衣', type: '防具', weapon: '', img: '', colors: { wu: 0, nei: 1, ling: 0, ti: 0 } },
+        { name: '三清铃', type: '宝物', weapon: '', img: '', colors: { wu: 0, nei: 1, ling: 0, ti: 0 }, cleanse: true },
+      ],
+      deck: ['lieyan', 'zhuiying', 'liuxing', 'zhehua', 'fanggun', 'shenxing', 'zhiliao'],
+      role: '法术输出 / 治疗：灵力 2 → 符咒打 3 点；「治疗符」兼修，是唯一能自愈的角色。',
+    },
   };
+  let HERO = HERO_DEFS.shiyou;          // 当前角色，由开局选择界面设定
+  function heroSum(h) {
+    const t = { wu: 0, nei: 0, ling: 0, ti: 0, moveBonus: 0 };
+    h.equip.forEach(e => {
+      t.wu += e.colors.wu; t.nei += e.colors.nei; t.ling += e.colors.ling; t.ti += e.colors.ti;
+      if (e.moveBonus) t.moveBonus += e.moveBonus;
+    });
+    return t;
+  }
+  function heroPanel(h) {
+    const s = heroSum(h);
+    return { wu: s.wu, nei: s.nei, ling: s.ling, ti: s.ti,
+             hp: 8 + s.ti * 3, move: 2 + s.moveBonus };
+  }
+  // 角色可用的武器类别（由已穿戴装备推导；锋利的匕首同时是「匕」类武器的载体）
+  function heroWeapons(h) { return h.equip.map(e => e.weapon).filter(Boolean); }
+  function heroPassive(h, key) { return h.equip.some(e => e[key] !== undefined) ? h.equip.find(e => e[key] !== undefined)[key] : 0; }
 
-  /* ---------------- 石友初始卡组 ---------------- */
+  /* ---------------- 招式卡总表（四位角色共用一张表，按 id 取用） ----------------
+   * dmgMode: fixed 固定 / wu 武力 / wu-1 武力-1 / ling-1 灵力-1 / ling+1 灵力+1
+   *          / nei+2 内力+2 / wu+nei 武力+内力
+   * 其它字段：push 推远N格 / rotate 旋转N格 / status 附加状态 / selfMove 先移动后结算
+   *          jump 飞跃（'nei' 表示飞跃内力格）/ jumpDmg 飞跃途中伤害 / swap 与灵兽换位
+   *          selfHp 自伤 / discardHand 弃置剩余手牌 / moveN 结算后额外移动 / heal 治疗
+   */
   const CARD_TPL = {
-    tunci:    { id: 'tunci',    name: '突刺',   cost: 1, weapon: '枪', dmgMode: 'fixed', dmg: 2, range: 1, type: 'attack', desc: '造成2点伤害（需枪）' },
-    yongtui:  { id: 'yongtui',  name: '用劲推', cost: 1, weapon: '',   dmgMode: 'wu',   range: 1, push: 1, type: 'attack', desc: '造成(武-1)伤害，推远1格' },
-    lianhuan: { id: 'lianhuan', name: '连环掌', cost: 1, weapon: '',   dmgMode: 'wu',   range: 1, push: 1, type: 'attack', desc: '造成(武-1)伤害，推远1格' },
-    gedang:   { id: 'gedang',   name: '格挡',   cost: 0, weapon: '',   type: 'react', desc: '遭受近战攻击时触发：减少1点伤害（应对卡）' },
-    feitui:   { id: 'feitui',   name: '飞踢',   cost: 1, weapon: '',   dmgMode: 'wu',   range: 1, selfMove: true, type: 'attack', desc: '移动1格并造成(武-1)伤害' },
-    tiaoxi:   { id: 'tiaoxi',   name: '调息',   cost: 'X', weapon: '', type: 'heal', healHp: 1, gainNei: 1, desc: '恢复1生命与1内力（耗全部内力X）' },
-    huima:    { id: 'huima',    name: '回马枪', cost: 'X', weapon: '枪', dmgMode: 'wu', range: 1, selfMove: true, type: 'attack', desc: '移动1格造成(武-1)伤害（需枪）' },
+    /* —— 石友 —— */
+    tunci:     { id: 'tunci',     name: '突刺',   cost: 1,  weapon: '枪', dmgMode: 'fixed', dmg: 2, range: 1, type: 'attack', desc: '造成 2 伤害（需枪）' },
+    yongtui:   { id: 'yongtui',   name: '用劲推', cost: 1,  weapon: '',   dmgMode: 'wu-1', range: 1, push: 1, type: 'attack', desc: '造成(武-1)伤害，推远 1 格' },
+    lianhuan:  { id: 'lianhuan',  name: '连环掌', cost: 1,  weapon: '',   dmgMode: 'wu-1', range: 1, push: 1, type: 'attack', desc: '造成(武-1)伤害，推远 1 格' },
+    gedang:    { id: 'gedang',    name: '格挡',   cost: 0,  weapon: '',   type: 'react', react: { reduce: 1 }, desc: '遭受近战攻击时：减少 1 点伤害' },
+    feitui:    { id: 'feitui',    name: '飞踢',   cost: 1,  weapon: '',   dmgMode: 'wu-1', range: 1, selfMove: true, type: 'attack', desc: '移动 1 格并造成(武-1)伤害' },
+    tiaoxi:    { id: 'tiaoxi',    name: '调息',   cost: 'X', weapon: '',  type: 'heal', healHp: 1, gainNei: 1, desc: '恢复 1 生命与 1 内力（耗全部内力X）' },
+    huima:     { id: 'huima',     name: '回马枪', cost: 'X', weapon: '枪', dmgMode: 'wu-1', range: 1, selfMove: true, type: 'attack', desc: '移动 1 格造成(武-1)伤害（需枪）' },
+
+    /* —— 陈玄 —— */
+    suse:      { id: 'suse',      name: '速射',   cost: 1,  weapon: '弓', dmgMode: 'fixed', dmg: 1, range: 2, type: 'attack', moveN: 1, maxRangeBonus: 1, desc: '距离2造成 1 伤害（最大距离 +1）；自身移动 1 格' },
+    xuli:      { id: 'xuli',      name: '蓄力箭', cost: 'X', weapon: '弓', dmgMode: 'nei+2', range: 3, type: 'attack', discardHand: true, desc: '距离3造成 内力+2 伤害；弃置剩余手牌' },
+    fanggun:   { id: 'fanggun',   name: '翻滚',   cost: 0,  weapon: '',   type: 'react', react: { reduce: 'nei', move: 1, immune: true }, desc: '减少 内力 伤害；免疫眩晕与位移；移动 1 格' },
+    yongtui2:  { id: 'yongtui2',  name: '用力推', cost: 1,  weapon: '',   dmgMode: 'none', range: 1, push: 2, type: 'attack', desc: '推远 2 格（无伤害）' },
+    jianshan_cx:{ id: 'jianshan_cx', name: '剑闪', cost: 1, weapon: '剑', type: 'move', jump: 'nei', jumpDmg: 1, desc: '飞跃 内力 格；对越过的敌方各造成 1 伤害（需剑）' },
+    qiankun:   { id: 'qiankun',   name: '乾坤斗转', cost: 'X', weapon: '', dmgMode: 'none', range: 1, rotate: 3, status: 'stun', type: 'attack', desc: '旋转 3 格；附加眩晕' },
+    feidao:    { id: 'feidao',    name: '飞刀',   cost: 1,  weapon: '',   dmgMode: 'fixed', dmg: 1, range: 2, type: 'attack', moveN: 1, desc: '距离2造成 1 伤害；自身移动 1 格' },
+    yixing:    { id: 'yixing',    name: '移形换影', cost: 1, weapon: '',  type: 'move', swap: true, selfHp: 1, desc: '承受 1 伤害；与灵兽交换位置' },
+    dubiao:    { id: 'dubiao',    name: '毒镖',   cost: 1,  weapon: '',   dmgMode: 'fixed', dmg: 1, range: 3, status: 'poison', type: 'attack', desc: '距离3造成 1 伤害；附加中毒' },
+    qingren:   { id: 'qingren',   name: '青刃',   cost: 1,  weapon: '匕', dmgMode: 'fixed', dmg: 2, range: 1, type: 'attack', desc: '造成 2 伤害（需匕）' },
+
+    /* —— 毛颖 —— */
+    shenxing:  { id: 'shenxing',  name: '神行符', cost: 1,  weapon: '',   type: 'move', moveN: 2, desc: '自身移动 2 格' },
+    quanli:    { id: 'quanli',    name: '全力一击', cost: 'X', weapon: '', dmgMode: 'wu+nei', range: 1, type: 'attack', discardHand: true, desc: '造成 武力+内力 伤害；弃置剩余手牌' },
+    shangtiao: { id: 'shangtiao', name: '上挑',   cost: 1,  weapon: '剑', dmgMode: 'wu', range: 1, type: 'attack', desc: '造成 武力 伤害（需剑）' },
+    gedang_ti: { id: 'gedang_ti', name: '格挡',   cost: 0,  weapon: '',   type: 'react', react: { reduce: 'ti' }, desc: '遭受近战攻击时：减少 体力 伤害' },
+    hengzhan:  { id: 'hengzhan',  name: '横斩',   cost: 1,  weapon: '剑', dmgMode: 'wu-1', range: 1, aoe: true, type: 'attack', desc: '范围生效：对相邻所有敌人造成(武-1)伤害（需剑）' },
+    jianshan_my:{ id: 'jianshan_my', name: '剑闪', cost: 1, weapon: '剑', type: 'move', jump: 'nei', jumpDmg: 2, desc: '飞跃 内力 格；对越过的敌方各造成 2 伤害（需剑）' },
+
+    /* —— 方絮 —— */
+    lieyan:    { id: 'lieyan',    name: '烈炎咒', cost: 'X', weapon: '',  dmgMode: 'ling+1', range: 2, aoe: true, type: 'attack', discardHand: true, desc: '范围生效：造成 灵力+1 伤害；弃置剩余手牌' },
+    zhuiying:  { id: 'zhuiying',  name: '追影符', cost: 2,  weapon: '',   dmgMode: 'ling-1', range: 2, type: 'attack', tpAdjacent: true, desc: '距离2造成 灵力-1 伤害；瞬移至目标相邻格' },
+    liuxing:   { id: 'liuxing',   name: '流星一点', cost: 1, weapon: '',  dmgMode: 'ling-1', range: 1, type: 'attack', moveN: 1, desc: '造成 灵力-1 伤害；自身移动 1 格' },
+    zhehua:    { id: 'zhehua',    name: '折花回风', cost: 0, weapon: '',  dmgMode: 'fixed', dmg: 2, range: 1, rotate: 2, type: 'attack', desc: '造成 2 伤害；旋转 2 格' },
+    zhiliao:   { id: 'zhiliao',   name: '治疗符', cost: 2,  weapon: '',   type: 'heal', healHp: 2, range: 2, desc: '恢复 2 生命值（三清铃：同时清除负面状态）' },
   };
   function mkCard(id) { return Object.assign({}, CARD_TPL[id]); }
   function cardCost(card) { return card.cost === 'X' ? player.panel.nei : card.cost; }
-  function cardDmg(card) { return card.dmgMode === 'fixed' ? card.dmg : Math.max(1, player.panel.wu - 1); }
+  // 伤害结算：按 dmgMode 取当前面板值（规则书 §5.2「造成 X 伤害」）
+  function cardDmg(card) {
+    const p = player.panel;
+    switch (card.dmgMode) {
+      case 'fixed':  return card.dmg || 0;
+      case 'wu':     return p.wu;
+      case 'wu-1':   return Math.max(1, p.wu - 1);
+      case 'ling-1': return Math.max(1, p.ling - 1);
+      case 'ling+1': return p.ling + 1;
+      case 'nei+2':  return p.nei + 2;
+      case 'wu+nei': return p.wu + p.nei;
+      default:       return 0;                       // 'none'：纯位移/控制，不造成伤害
+    }
+  }
 
   /* ---------------- 灵兽：通灵猫（琥珀串珠·特殊技能） ---------------- */
   // 移动2格 + 对相邻敌人造成1伤害。交互阶段可派出；每交互阶段可移动合计2格并攻击一次，阶段结束保留在场上。
@@ -289,8 +381,10 @@
     return true;
   }
   // 「召灵猫」按钮是否可用：交互阶段 +（灵猫不在场/已阵亡 → 付得起代价且有落点；存活 → 本阶段还没行动）
+  // 只有拥有灵兽图腾（琥珀串珠）的角色才能召唤
   function canSummonCat() {
     if (state.phase !== 'interact' || state.status !== 'playing' || state.busy || phaseLock) return false;
+    if (!HERO.equip.some(e => e.beast)) return false;
     const down = !spiritCat || !spiritCat.alive;
     if (down) return canAffordSummon() && catSummonCells().length > 0;
     return !spiritCat.used;
@@ -347,20 +441,23 @@
   function jiHp() { return (ASSIST.enabled && ASSIST.jiHpAssist) ? 12 : 1; }
   // 内力：原规则 = 装备卡绿字之和（石友为 1，即每回合只出 1 张招式）。
   // 本章为 4 人局，4 名玩家合计每回合约 4 张；单人原型补偿为 4。
-  function neiMax() { return (ASSIST.enabled && ASSIST.neiAssist) ? 4 : PLAYER_BASE.nei; }
+  function neiMax() { return (ASSIST.enabled && ASSIST.neiAssist) ? 4 : player.panel.nei; }
   let player, jiChang, enemies, spiritCat;
   let UNIT_INFO = {};   // uid → 悬停信息卡 HTML（renderBoard 时刷新）
   function freshState() {
+    const base = heroPanel(HERO);
     player = {
-      id: 'p', name: '石友', char: '石',
+      id: 'p', name: HERO.name, char: HERO.char,
       pos: { col: playerStart.col, row: playerStart.row },
-      panel: { wu: PLAYER_BASE.wu, nei: neiMax(), ling: PLAYER_BASE.ling, ti: PLAYER_BASE.ti,
-               hp: PLAYER_BASE.hp, maxHp: PLAYER_BASE.hp, move: PLAYER_BASE.move,
-               moveLeft: PLAYER_BASE.move, neiLeft: neiMax() },
-      hand: [mkCard('tunci'), mkCard('yongtui'), mkCard('lianhuan'), mkCard('gedang'), mkCard('feitui'), mkCard('tiaoxi'), mkCard('huima')],
+      panel: { wu: base.wu, nei: base.nei, ling: base.ling, ti: base.ti,
+               hp: base.hp, maxHp: base.hp, move: base.move,
+               moveLeft: base.move, neiLeft: base.nei },
+      hand: HERO.deck.map(mkCard),
       discard: [],
-      equipment: EQUIPMENT,
-      status: { stun: false, poison: 0 }, alive: true, blockNext: false,
+      equipment: HERO.equip,
+      weapons: heroWeapons(HERO),
+      // 负面状态（规则书 §5.5）：眩晕 / 中毒（标记数字，2 起步）/ 减速（未收录细则，按移动力-1 处理）
+      status: { stun: false, poison: 0, slow: false }, alive: true, blockNext: false,
     };
     // 姬昌生命值 = 1（剧情卡 setup：「放置 1 枚数值为 1 的生命值标记」；
     // 说明书 P22 失败条件之一即「姬昌生命值为 0」）
@@ -381,6 +478,8 @@
     phase: 'move', turn: 1, status: 'playing', msg: '', busy: false,
     selectedCard: null, attackPlayed: false, rested: false, catMode: false, catSummon: false, catStep: 0,
     feitui: null,   // 位移类招式（飞踢/回马枪）的两阶段流程：{ stage:'move'|'target', card }
+    jump: null,     // 飞跃类招式（剑闪）：{ card, n, cells }
+    bonusMove: null,// 结算后的额外移动：{ n, card, cells }
     jiMoved: false, // 本回合是否已执行过同伴行动（姬昌每回合只能移动 1 步）
     reachSet: new Set(), tgtSet: new Set(), log: [],
   };
@@ -464,8 +563,8 @@
   /* ---------------- 战斗 / 技能 ---------------- */
   function canPlay(card) {
     const cost = cardCost(card);
-    if ((card.type === 'attack' || card.type === 'heal') && player.panel.neiLeft < cost) return false;
-    if (card.weapon && card.weapon !== player.equipment[0].weapon) return false;
+    if ((card.type === 'attack' || card.type === 'heal' || card.type === 'move') && player.panel.neiLeft < cost) return false;
+    if (card.weapon && player.weapons.indexOf(card.weapon) < 0) return false;
     return true;
   }
   function enemiesInRange(range) { return enemies.filter(e => e.alive && hexDist(player.pos, e.pos) <= range); }
@@ -551,31 +650,74 @@
     checkEnd(); render();
     scheduleAttackAutoAdvance(900);
   }
+  // 付费 + 弃牌：任何分支结算前都要走这一步，否则会出现「只结算不消卡」
+  function payAndDiscard(card) {
+    const cost = cardCost(card);
+    player.panel.neiLeft = Math.max(0, player.panel.neiLeft - cost);
+    const i = player.hand.indexOf(card);
+    if (i >= 0) player.hand.splice(i, 1);
+    player.discard.push(card);
+    state.attackPlayed = true; state.selectedCard = null;
+    if (card.discardHand && player.hand.length) {
+      const n = player.hand.length;
+      player.discard = player.discard.concat(player.hand);
+      player.hand = [];
+      log('【' + card.name + '】：弃置剩余手牌 ' + n + ' 张', 'bad');
+    }
+  }
+  // 结算后的额外移动（速射 / 飞刀 / 流星一点 / 神行符）：玩家自选落点
+  function offerBonusMove(card, n) {
+    const cells = bonusMoveCells(n);
+    if (!cells.length) return false;
+    state.bonusMove = { n: n, card: card, cells: cells };
+    log('「' + card.name + '」自身生效：点击高亮格移动最多 ' + n + ' 格（或点「结束本阶段」放弃）', 'hit');
+    return true;
+  }
   async function playCard(card, targetEnemy) {
     if (!player.hand.includes(card)) return;   // 防止重复点击已打出的卡再次结算
     // 出招阶段：休整与打招式卡只能选一个执行
     if (state.rested) { log('本阶段已休整，不能再打出招式卡（休整与出招只能二选一）', 'bad'); render(); return; }
     if (!canPlay(card)) { log('无法施展：' + card.name, 'bad'); return; }
-    const cost = cardCost(card);
     if (card.type === 'react') {
       // 应对卡不应在出招阶段主动使用（手牌已禁用点击，这里再兜一层）
       log('【' + card.name + '】是应对卡，需在遭受近战攻击时选择触发', 'bad');
       render(); return;
-    } else if (card.type === 'heal') {
-      const neiBefore = player.panel.neiLeft;
-      player.panel.neiLeft -= cost;
-      const before = player.panel.hp;
-      player.panel.hp = Math.min(player.panel.maxHp, player.panel.hp + (card.healHp || 0));
-      player.panel.neiLeft = Math.min(player.panel.nei, player.panel.neiLeft + (card.gainNei || 0));
-      const healed = player.panel.hp - before;
-      // 立即移出手牌并标记本阶段已出招，避免治疗飘字期间重复结算
-      const hi = player.hand.indexOf(card); if (hi >= 0) player.hand.splice(hi, 1);
-      player.discard.push(card);
-      state.attackPlayed = true; state.selectedCard = null;
-      log('石友调息：生命 +' + healed + '，内力 ' + neiBefore + ' → ' + player.panel.neiLeft, 'hit');
-      checkEnd();
-      if (healed > 0) await floatText(player.pos, '+' + healed, '#7CFC8C');
-      render(); scheduleAttackAutoAdvance(850); return;
+    }
+    // —— 飞跃（剑闪）：玩家先选落点，落地后对飞跃途中的敌人结算伤害
+    if (card.jump) {
+      const n = card.jump === 'nei' ? player.panel.nei : card.jump;
+      const cells = jumpCells(n);
+      if (!cells.length) { log('「' + card.name + '」：四周没有可落脚的格子', 'bad'); render(); return; }
+      state.jump = { card: card, n: n, cells: cells };
+      state.selectedCard = null;
+      log('「' + card.name + '」：点击高亮格选择飞跃落点（可越过单位与障碍，最远 ' + n + ' 格）', 'hit');
+      render(); return;
+    }
+    // —— 移形换影：承受 1 伤害，与灵兽交换位置
+    if (card.swap) {
+      if (!spiritCat || !spiritCat.alive) {
+        log('「' + card.name + '」需要场上有灵兽才能施展（先在交互阶段召唤通灵猫）', 'bad'); render(); return;
+      }
+      state.busy = true;
+      payAndDiscard(card);
+      player.panel.hp -= (card.selfHp || 0);
+      log('【' + card.name + '】石友承受 ' + (card.selfHp || 0) + ' 点伤害，与通灵猫交换位置', 'bad');
+      const pPos = { col: player.pos.col, row: player.pos.row };
+      player.pos = { col: spiritCat.pos.col, row: spiritCat.pos.row };
+      spiritCat.pos = pPos;
+      onDisplaced(player); onDisplaced(spiritCat);
+      if (player.panel.hp <= 0) { player.panel.hp = 0; player.alive = false; }
+      state.busy = false;
+      checkDeaths(); checkEnd(); render();
+      scheduleAttackAutoAdvance(900); return;
+    }
+    // —— 纯移动卡（神行符）
+    if (card.type === 'move') {
+      state.busy = true;
+      payAndDiscard(card);
+      state.busy = false;
+      if (!offerBonusMove(card, card.moveN || 1)) log('「' + card.name + '」四周没有可移动的空格', 'bad');
+      render(); scheduleAttackAutoAdvance(900); return;
     }
     // 位移类招式（飞踢 / 回马枪）：立即结算改为「玩家先选落点」的两阶段流程
     if (card.selfMove) {
@@ -587,49 +729,140 @@
       log('「' + card.name + '」：点击高亮格选择移动落点（落点旁有敌人即可造成伤害）', 'hit');
       render(); return;
     }
-    // 攻击：播放演出并结算伤害（不改动任何规则数值）
+    // —— 治疗 / 调息
+    if (card.type === 'heal') {
+      const neiBefore = player.panel.neiLeft;
+      player.panel.neiLeft -= cardCost(card);
+      const before = player.panel.hp;
+      player.panel.hp = Math.min(player.panel.maxHp, player.panel.hp + (card.healHp || 0));
+      player.panel.neiLeft = Math.min(player.panel.nei, player.panel.neiLeft + (card.gainNei || 0));
+      const healed = player.panel.hp - before;
+      // 三清铃：恢复生命值时清除自身所有负面状态
+      if (heroPassive(HERO, 'cleanse') && healed > 0) {
+        const had = statusText(player);
+        stOf(player).stun = false; stOf(player).poison = 0; stOf(player).slow = false;
+        if (had) log('【三清铃】' + HERO.name + '恢复生命，清除负面状态：' + had, 'hit');
+      }
+      const hi = player.hand.indexOf(card); if (hi >= 0) player.hand.splice(hi, 1);
+      player.discard.push(card);
+      state.attackPlayed = true; state.selectedCard = null;
+      log(HERO.name + '使用【' + card.name + '】：生命 +' + healed + '，内力 ' + neiBefore + ' → ' + player.panel.neiLeft, 'hit');
+      checkEnd();
+      if (healed > 0) await floatText(player.pos, '+' + healed, '#7CFC8C');
+      render(); scheduleAttackAutoAdvance(850); return;
+    }
+    // —— 攻击类
     state.busy = true;
-    player.panel.neiLeft -= cost;
+    player.panel.neiLeft -= cardCost(card);
     const dmg = cardDmg(card);
     const hits = card.aoe ? enemiesInRange(card.range)
       : (targetEnemy && hexDist(player.pos, targetEnemy.pos) <= card.range ? [targetEnemy] : []);
     if (hits.length === 0) log('「' + card.name + '」未命中目标', 'bad');
     for (const en of hits) {
       const idx = enemies.indexOf(en);
-      await playAttack('p', 'm' + idx, player.pos, en.pos, dmg);
-      en.hp -= dmg;
-      log('石友以「' + card.name + '」对' + en.name + '造成' + dmg + '点伤害', 'hit');
-    }
-    // 击退：推到「玩家→敌人」延长线上的下一格（轴向 cube 坐标求直线方向，不绕障碍）；
-    // 目标格不可移动（墙/岩石/被占/越界）则不推。
-    if (card.push && targetEnemy && hits.length) {
-      const A = toCube(player.pos), B = toCube(targetEnemy.pos);
-      const dBx = B.x - A.x, dBy = B.y - A.y, dBz = B.z - A.z;   // 玩家→敌人向量
-      let bestN = null, bestDot = -Infinity;
-      for (const nb of neighbors(targetEnemy.pos)) {
-        if (!inBounds(nb)) continue;
-        const N = toCube(nb);
-        // 敌方的 6 邻中，与「玩家→敌人」向量最对齐的那个 = 延长线上的下一格
-        const dot = (N.x - A.x) * dBx + (N.y - A.y) * dBy + (N.z - A.z) * dBz;
-        if (dot > bestDot) { bestDot = dot; bestN = nb; }
+      // 伤害加成：巧劲护腕（对负面状态目标 +1）、速射（最大距离 +1）、眩晕中受伤 +1
+      let d = dmg;
+      const debuffBonus = heroPassive(HERO, 'bonusVsDebuff');
+      if (debuffBonus && hasDebuff(en)) {
+        d += debuffBonus;
+        log('【巧劲护腕】' + en.name + '处于负面状态，伤害 +' + debuffBonus, 'hit');
       }
-      if (bestN) {
-        const np = bestN;
-        const cl = cellAt(np);
-        if (cl && cl.type !== 'wall' && cl.type !== 'rock' && !isOccupied(np)) {
-          const efrom = { col: targetEnemy.pos.col, row: targetEnemy.pos.row };
-          targetEnemy.pos = np;
-          log(targetEnemy.name + '被推远一格', 'hit');
-          await animateMove('m' + enemies.indexOf(targetEnemy), efrom, np);
-        }
+      if (card.maxRangeBonus && hexDist(player.pos, en.pos) === card.range) {
+        d += card.maxRangeBonus;
+        log('【' + card.name + '】已达最大距离，伤害 +' + card.maxRangeBonus, 'hit');
+      }
+      if (stOf(en).stun) {
+        d += 1; stOf(en).stun = false;
+        log(en.name + '处于眩晕，受到的伤害 +1 并立即解除眩晕（规则书 §5.5）', 'hit');
+      }
+      if (d > 0) {
+        await playAttack('p', 'm' + idx, player.pos, en.pos, d);
+        en.hp -= d;
+        log(HERO.name + '以「' + card.name + '」对' + en.name + '造成' + d + '点伤害', 'hit');
+      } else {
+        log(HERO.name + '以「' + card.name + '」命中' + en.name + '（该招式不造成伤害）', 'hit');
+      }
+      if (card.status) applyStatus(en, card.status);
+      if (card.rotate && en.hp > 0) {
+        const from = { col: en.pos.col, row: en.pos.row };
+        const moved = rotateTarget(player.pos, en, card.rotate);
+        if (moved) {
+          log(en.name + '被旋转 ' + moved + ' 格至 (' + en.pos.col + ',' + en.pos.row + ')', 'hit');
+          onDisplaced(en);
+          await animateMove('m' + idx, from, en.pos);
+        } else log(en.name + '四周被挡住，无法旋转', 'bad');
       }
     }
-    const idx = player.hand.indexOf(card); if (idx >= 0) player.hand.splice(idx, 1);
-    player.discard.push(card);
-    state.attackPlayed = true; state.selectedCard = null;
+    // 击退：沿「玩家→敌人」延长线推远 n 格，每步距离必须更大，遇阻停止（规则书 §5.3）
+    if (card.push && targetEnemy && hits.length && targetEnemy.hp > 0) {
+      const from = { col: targetEnemy.pos.col, row: targetEnemy.pos.row };
+      const moved = shiftAlong(player.pos, targetEnemy, card.push, true);
+      if (moved) {
+        log(targetEnemy.name + '被推远 ' + hexDist(from, targetEnemy.pos) + ' 格至 (' + targetEnemy.pos.col + ',' + targetEnemy.pos.row + ')', 'hit');
+        onDisplaced(targetEnemy);
+        await animateMove('m' + enemies.indexOf(targetEnemy), from, targetEnemy.pos);
+      } else log(targetEnemy.name + '身后被挡住，无法推远', 'bad');
+    }
+    // 追影符：瞬移到目标相邻格
+    if (card.tpAdjacent && hits.length) {
+      const tgt = hits[0];
+      const free = neighbors(tgt.pos).filter(c => {
+        const cl = cellAt(c);
+        return cl && cl.type !== 'wall' && cl.type !== 'rock' && !isOccupied(c);
+      });
+      if (free.length) {
+        const from = { col: player.pos.col, row: player.pos.row };
+        player.pos = { col: free[0].col, row: free[0].row };
+        log('【' + card.name + '】瞬移至' + tgt.name + '相邻格 (' + player.pos.col + ',' + player.pos.row + ')', 'hit');
+        onDisplaced(player);
+        await animateMove('p', from, player.pos);
+      } else log('【' + card.name + '】目标四周无空位，无法瞬移', 'bad');
+    }
+    payAndDiscard(card);
+    // 结算后的额外移动（速射 / 飞刀 / 流星一点）
+    if (card.moveN && player.alive) offerBonusMove(card, card.moveN);
     state.busy = false;
     checkDeaths(); checkEnd(); render();
     scheduleAttackAutoAdvance(900);
+  }
+  // —— 飞跃落地：支付内力、结算途中伤害、落点位移
+  async function jumpLand(c) {
+    const j = state.jump;
+    if (!j) return;
+    if (!j.cells.some(s => eq(s, c))) { log('请点击高亮的落点', 'bad'); return; }
+    state.jump = null;
+    state.busy = true;
+    const from = { col: player.pos.col, row: player.pos.row };
+    const passed = enemiesPassed(from, c);
+    payAndDiscard(j.card);
+    player.pos = { col: c.col, row: c.row };
+    log('【' + j.card.name + '】飞跃 ' + hexDist(from, c) + ' 格至 (' + c.col + ',' + c.row + ')', 'hit');
+    onDisplaced(player);
+    for (const en of passed) {
+      const idx = enemies.indexOf(en);
+      await playAttack('p', 'm' + idx, player.pos, en.pos, j.card.jumpDmg);
+      en.hp -= j.card.jumpDmg;
+      log('飞跃途中越过' + en.name + '，造成 ' + j.card.jumpDmg + ' 点伤害', 'hit');
+    }
+    state.busy = false;
+    checkDeaths(); checkEnd(); render();
+    scheduleAttackAutoAdvance(900);
+  }
+  // —— 结算后的额外移动：点高亮格落地
+  async function bonusMoveTo(c) {
+    const b = state.bonusMove;
+    if (!b) return;
+    if (!b.cells.some(s => eq(s, c))) { log('请点击高亮格移动', 'bad'); return; }
+    state.busy = true;
+    const from = { col: player.pos.col, row: player.pos.row };
+    player.pos = { col: c.col, row: c.row };
+    state.bonusMove = null;
+    onDisplaced(player);
+    await animateMove('p', from, player.pos);
+    log('【' + b.card.name + '】自身移动至 (' + c.col + ',' + c.row + ')', 'hit');
+    state.busy = false;
+    checkDeaths(); checkEnd(); render();
+    scheduleAttackAutoAdvance(700);
   }
 
   /* ---------------- 通灵猫行动 ---------------- */
@@ -730,6 +963,12 @@
       .filter(t => t && hpOf(t) > 0 && (t.alive !== false)
                     && (t !== jiChang || jiChang.found));
     if (!targets.length) return;
+    // 眩晕（规则书 §5.5）：被要求行动时不执行行动，直接弃置行动卡，完成后解除眩晕
+    if (stOf(e).stun) {
+      stOf(e).stun = false;
+      log(e.name + '处于【眩晕】，本次行动被跳过、行动卡直接弃置（规则书 §5.5）', 'bad');
+      return;
+    }
     targets.sort((a, b) => hexDist(e.pos, a.pos) - hexDist(e.pos, b.pos));
     const moveTarget = targets[0];
     const atkUid = 'm' + enemies.indexOf(e);
@@ -766,6 +1005,160 @@
   // 否则会出现「攻击日志正常但玩家永远不掉血」的假象（v0.5 修复）。
   function hpOf(t) { return t === player ? player.panel.hp : t.hp; }
   function dealDamage(t, dmg) { if (t === player) player.panel.hp -= dmg; else t.hp -= dmg; }
+
+  /* ---------------- 负面状态（规则书 §5.5） ----------------
+   * 眩晕：已有标记则再次附加无效；敌方被要求行动时跳过行动并解除；眩晕中受伤 +1 且不能用应对卡。
+   * 中毒：标记数字 2 起步；每次位移（移动/飞跃/旋转/被旋转）后 -1 生命、标记 -1；为 0 时移除。
+   * 减速：规则书未收录细则，按「移动力 -1」处理（仅作负面状态标记使用）。
+   */
+  function stOf(u) { if (!u.status) u.status = { stun: false, poison: 0, slow: false }; return u.status; }
+  function hasDebuff(u) { const s = stOf(u); return !!(s.stun || s.poison > 0 || s.slow); }
+  function statusText(u) {
+    const s = stOf(u); const out = [];
+    if (s.stun) out.push('眩晕');
+    if (s.poison > 0) out.push('中毒' + s.poison);
+    if (s.slow) out.push('减速');
+    return out.join(' · ');
+  }
+  function applyStatus(u, kind) {
+    const s = stOf(u);
+    if (kind === 'stun') {
+      if (s.stun) { log(u.name + '身上已有眩晕标记，再次附加无效（规则书 §5.5）', 'bad'); return false; }
+      s.stun = true;
+      log(u.name + '被附加【眩晕】：下次行动将被跳过', 'hit');
+    } else if (kind === 'poison') {
+      s.poison = 2;
+      log(u.name + '被附加【中毒】（标记 2 点）：每次位移失去 1 点生命', 'hit');
+    } else if (kind === 'slow') {
+      s.slow = true;
+      log(u.name + '被附加【减速】：移动力 -1', 'hit');
+    }
+    return true;
+  }
+  // 位移结算钩子：中毒角色每次位移后扣 1 血（无论主动被动）
+  function onDisplaced(u) {
+    const s = stOf(u);
+    if (!s.poison) return;
+    const before = hpOf(u);
+    dealDamage(u, 1);
+    s.poison -= 1;
+    log('【中毒】' + u.name + '位移后失去 1 点生命（' + before + ' → ' + Math.max(0, hpOf(u)) +
+        '），中毒标记 ' + s.poison, 'bad');
+    if (s.poison <= 0) { s.poison = 0; log(u.name + '身上的中毒标记已移除', 'hit'); }
+  }
+  // 比较「谁离 from 更远」用的距离
+  function distFrom(from, c) { return hexDist(from, c); }
+  // 推远 / 拉近 N 格：每步都必须让距离更大（或更小），遇阻停止（规则书 §5.3）
+  function shiftAlong(fromPos, target, n, away) {
+    let last = null;
+    for (let i = 0; i < n; i++) {
+      const cur = target.pos;
+      let best = null, bestD = distFrom(fromPos, cur);
+      for (const nb of neighbors(cur)) {
+        if (!inBounds(nb)) continue;
+        const cl = cellAt(nb);
+        if (!cl || cl.type === 'wall' || cl.type === 'rock') continue;
+        if (isOccupied(nb)) continue;
+        const d = distFrom(fromPos, nb);
+        if (away ? d > bestD : d < bestD) { bestD = d; best = nb; }
+      }
+      if (!best) break;
+      target.pos = { col: best.col, row: best.row };
+      last = best;
+    }
+    return last;
+  }
+  // 以 center 为中心的 6 邻环，按顺时针排序（先按角度排序，保证稳定）
+  function ringCells(center) {
+    const ring = neighbors(center).filter(c => inBounds(c) && cellAt(c));
+    const c0 = hexCenter(center.col, center.row);
+    return ring.map(c => {
+      const p = hexCenter(c.col, c.row);
+      return { c: c, a: Math.atan2(p.y - c0.y, p.x - c0.x) };
+    }).sort((x, y) => x.a - y.a).map(o => o.c);
+  }
+  // 旋转 N 格：相邻目标绕自身顺时针/逆时针移动，遇到单位或障碍停止（规则书 §5.3）
+  // 方向由「哪边能走得更远」决定；同样远时取顺时针。
+  function rotateTarget(centerPos, target, n) {
+    const ring = ringCells(centerPos);
+    const idx = ring.findIndex(c => eq(c, target.pos));
+    if (idx < 0) return null;
+    function walk(dir) {
+      let pos = idx, moved = 0;
+      for (let i = 0; i < n; i++) {
+        const nxt = (pos + dir + ring.length) % ring.length;
+        const c = ring[nxt];
+        const cl = cellAt(c);
+        if (!cl || cl.type === 'wall' || cl.type === 'rock') break;
+        if (isOccupied(c)) break;
+        pos = nxt; moved++;
+      }
+      return { pos: pos, moved: moved };
+    }
+    const cw = walk(1), ccw = walk(-1);
+    const pick = cw.moved >= ccw.moved ? cw : ccw;
+    if (pick.moved === 0) return null;
+    target.pos = { col: ring[pick.pos].col, row: ring[pick.pos].row };
+    return pick.moved;
+  }
+  // 飞跃 N 格：沿直线越过单位/障碍，落点不能有任何单位（规则书 §5.3）
+  // 用 cube 坐标推进，保证 6 个方向都是真正的直线（odd-q 偏移下逐格加减会歪）
+  function jumpCells(n) {
+    const start = toCube(player.pos);
+    const dirs = [[1, 0, -1], [1, -1, 0], [0, -1, 1], [-1, 0, 1], [-1, 1, 0], [0, 1, -1]];
+    const out = [];
+    const seen = new Set();
+    for (const d of dirs) {
+      for (let i = 1; i <= n; i++) {
+        const cell = cubeToCell({ x: start.x + d[0] * i, y: start.y + d[1] * i, z: start.z + d[2] * i });
+        if (!inBounds(cell)) break;
+        const cl = cellAt(cell);
+        if (!cl) break;
+        if (cl.type === 'wall' || cl.type === 'rock') continue;   // 飞跃可以越过障碍
+        const k = key(cell);
+        if (seen.has(k)) continue;
+        seen.add(k);
+        if (!isOccupied(cell)) out.push(cell);                    // 落点不能有任何单位
+      }
+    }
+    return out;
+  }
+  // 飞跃途中越过的敌方单位（从起跳到落点的直线中间的格子）
+  function enemiesPassed(from, to) {
+    const out = [];
+    for (const cell of cellsOnLine(from, to)) {
+      const en = enemyAt(cell);
+      if (en) out.push(en);
+    }
+    return out;
+  }
+  // 结算后额外移动的候选格（步数 n，敌人视为障碍，友军可穿越不可停留）
+  function bonusMoveCells(n) {
+    const out = [];
+    if (!player.alive) return out;
+    const dist = {}; dist[key(player.pos)] = 0;
+    const q = [player.pos];
+    while (q.length) {
+      const cur = q.shift();
+      const d = dist[key(cur)];
+      if (d >= n) continue;
+      for (const nb of neighbors(cur)) {
+        if (!inBounds(nb)) continue;
+        const cl = cellAt(nb);
+        if (!cl || cl.type === 'wall' || cl.type === 'rock') continue;
+        if (isEnemyOccupied(nb)) continue;
+        const k = key(nb);
+        if (dist[k] === undefined) { dist[k] = d + 1; q.push(nb); }
+      }
+    }
+    for (const k in dist) {
+      if (!dist[k]) continue;
+      const [c, r] = k.split(',').map(Number);
+      const cell = { col: c, row: r };
+      if (!isOccupied(cell)) out.push(cell);
+    }
+    return out;
+  }
   /* 应对卡触发提示：等待玩家选择「使用 / 不触发」 */
   function promptReact(card, attackerName, targetName, dmg) {
     return new Promise(function (resolve) {
@@ -799,9 +1192,12 @@
   async function enemyAttack(e, target) {
     let dmg = e.atk;
     let usedReact = null;
-    // 应对卡（0 内力，如「格挡」）：仅在**遭受近战攻击**时提示是否触发（用户明确规则）；
-    // 不在己方出招阶段主动使用。
-    if (target === player) {
+    // 眩晕中受伤：无法使用应对牌，且受到的伤害 +1；受伤后立即解除眩晕（规则书 §5.5）
+    const playerStunned = (target === player) && stOf(player).stun;
+    if (playerStunned) {
+      dmg += 1;
+      log('石友处于【眩晕】：无法使用应对卡，且受到的伤害 +1（规则书 §5.5）', 'bad');
+    } else if (target === player) {
       const rc = player.hand.find(c => c.type === 'react');
       if (rc && isMeleeAttacker(e)) {
         const use = await promptReact(rc, e.name, target.name, dmg);
@@ -810,8 +1206,18 @@
           player.hand = player.hand.filter(c => c !== rc);
           player.discard.push(rc);
           const before = dmg;
-          dmg = Math.max(0, dmg - 1);            // 格挡：减少 1 点伤害（卡面数值）
-          log('石友打出【' + rc.name + '】：伤害 ' + before + ' → ' + dmg, 'hit');
+          // 减伤数值由卡面决定：固定 1 点 / 按内力属性 / 按体力属性
+          const r = rc.react || { reduce: 1 };
+          const cut = r.reduce === 'nei' ? player.panel.nei : (r.reduce === 'ti' ? player.panel.ti : r.reduce);
+          dmg = Math.max(0, dmg - (cut || 0));
+          log(HERO.name + '打出【' + rc.name + '】：伤害 ' + before + ' → ' + dmg +
+              '（减伤 ' + (cut || 0) + '）', 'hit');
+          // 翻滚：免疫眩晕和位移效果 + 打出后移动 1 格
+          if (r.immune) { stOf(player).stun = false; log('【' + rc.name + '】免疫眩晕与位移效果', 'hit'); }
+          if (r.move) {
+            const cells = bonusMoveCells(r.move);
+            if (cells.length) { offerBonusMove(rc, r.move); }
+          }
         }
       } else if (rc) {
         log(e.name + '为远程攻击（射程 ' + e.range + '），【' + rc.name + '】只能挡近战，无法应对', 'bad');
@@ -832,6 +1238,7 @@
     }
     dealDamage(target, dmg);
     log(e.name + '攻击' + target.name + '，造成' + dmg + '点伤害', 'bad');
+    if (playerStunned) { stOf(player).stun = false; log(HERO.name + '受伤后解除眩晕', 'hit'); }
     if (target === player) {
       if (player.panel.hp <= 0) {
         player.panel.hp = 0; player.alive = false;
@@ -939,6 +1346,12 @@
     if (!canPlay(card)) return false;                 // 内力不足 / 武器不符
     // 位移类招式（飞踢/回马枪）：只要有可站的相邻格就能打出，**不要求有敌人**
     if (card.selfMove) return feituiMoveCells().length > 0;
+    // 飞跃（剑闪）：有落点即可
+    if (card.jump) return jumpCells(card.jump === 'nei' ? player.panel.nei : card.jump).length > 0;
+    // 移形换影：必须有灵兽在场
+    if (card.swap) return !!(spiritCat && spiritCat.alive);
+    // 纯移动卡（神行符）：有可走格即可
+    if (card.type === 'move') return bonusMoveCells(card.moveN || 1).length > 0;
     // 攻击卡必须有可打目标
     if (card.type === 'attack') return attackTargets(card).length > 0;
     return true;                                      // 无目标卡（调息等）
@@ -979,6 +1392,9 @@
         : '已放弃「' + state.feitui.card.name + '」这一击', 'bad');
       state.feitui = null;
     }
+    // 飞跃未落地 / 额外移动未选择：直接放弃
+    if (state.jump) { log('已取消「' + state.jump.card.name + '」', 'bad'); state.jump = null; }
+    if (state.bonusMove) { log('放弃「' + state.bonusMove.card.name + '」的额外移动', 'bad'); state.bonusMove = null; }
     if (state.phase === 'move') { state.phase = 'attack'; state.attackPlayed = false; state.rested = false; state.selectedCard = null; }
     else if (state.phase === 'attack') { state.phase = 'interact'; state.selectedCard = null; }
     else if (state.phase === 'interact') {
@@ -1001,13 +1417,27 @@
     state.turn += 1; state.phase = 'move';
     state.rested = false; state.attackPlayed = false;
     state.jiMoved = false;           // 新回合：同伴行动恢复可用（姬昌每回合 1 步）
-    player.panel.moveLeft = player.panel.move;
+    state.jump = null; state.bonusMove = null;
+    // 减速：移动力 -1（规则书未收录细则，按常见处理，UI 标注「减速」）
+    const slowPenalty = stOf(player).slow ? 1 : 0;
+    player.panel.moveLeft = Math.max(0, player.panel.move - slowPenalty);
     player.panel.neiLeft = player.panel.nei;
     player.blockNext = false; state.busy = false; state.catMode = false; state.catSummon = false; state.feitui = null;
     // 通灵猫每回合刷新移动力与行动标记（已阵亡则跳过）
-    if (spiritCat && spiritCat.alive) { spiritCat.moveLeft = spiritCat.move; spiritCat.used = false; }
+    if (spiritCat && spiritCat.alive) {
+      spiritCat.moveLeft = Math.max(0, spiritCat.move - (stOf(spiritCat).slow ? 1 : 0));
+      spiritCat.used = false;
+    }
     render();
     showPhaseFx('move');
+    // 玩家眩晕（规则书 §5.5）：回合开始时跳过移动阶段与出招阶段，正常执行交互与敌方阶段，完成后解除
+    if (stOf(player).stun) {
+      stOf(player).stun = false;
+      state.phase = 'interact';
+      log(HERO.name + '处于【眩晕】：跳过移动阶段与出招阶段，直接进入交互阶段（规则书 §5.5）', 'bad');
+      render();
+      showPhaseFx('interact');
+    }
   }
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   async function runEnemyPhase() {
@@ -1037,7 +1467,7 @@
   function checkEnd() {
     if (state.status !== 'playing') return;
     if (jiChang.hp <= 0) { state.status = 'lose'; state.msg = '姬昌陨落，护送失败！'; }
-    else if (player.panel.hp <= 0) { state.status = 'lose'; state.msg = '石友阵亡，地牢失守！'; }
+    else if (player.panel.hp <= 0) { state.status = 'lose'; state.msg = HERO.name + '阵亡，地牢失守！'; }
     else if (jiChangAtGoal()) { state.status = 'win'; state.msg = '姬昌安然回到起点 —— 第一章·地牢通关！'; }
     else if (!ASSIST.drill && enemies.every(e => !e.alive)) { state.status = 'win'; state.msg = '地牢肃地，姬昌得以护送！'; }
     if (state.status !== 'playing') log(state.msg, state.status === 'win' ? 'win' : 'bad');
@@ -1053,6 +1483,10 @@
     if (state.status !== 'playing') return;
     // 位移类招式（飞踢/回马枪）的选落点 / 选目标优先处理
     if (state.feitui) { if (!state.busy) feituiClick({ col: col, row: row }); return; }
+    // 飞跃（剑闪）选落点
+    if (state.jump) { if (!state.busy) jumpLand({ col: col, row: row }); return; }
+    // 结算后的额外移动
+    if (state.bonusMove) { if (!state.busy) bonusMoveTo({ col: col, row: row }); return; }
     if (state.busy) return;
     const c = { col, row };
     if (state.phase === 'move') { if (isReachable(col, row)) stepMove(c); }
@@ -1225,7 +1659,7 @@
         }, 1100);
       }));
     }
-    proms.push(floatText(pos, '石友阵亡', '#ff5a4a'));
+    proms.push(floatText(pos, HERO.name + '阵亡', '#ff5a4a'));
     await Promise.all(proms);
   }
 
@@ -1266,6 +1700,9 @@
     if (state.feitui && state.feitui.stage === 'move') {
       feituiMoveCells().forEach(c => state.reachSet.add(key(c)));
     }
+    // 飞跃落点 / 结算后额外移动：同样并入「可走格」高亮
+    if (state.jump) state.jump.cells.forEach(c => state.reachSet.add(key(c)));
+    if (state.bonusMove) state.bonusMove.cells.forEach(c => state.reachSet.add(key(c)));
     state.tgtSet = new Set();
     if (state.phase === 'attack' && state.selectedCard && state.selectedCard.type === 'attack') {
       attackTargets(state.selectedCard).forEach(e => state.tgtSet.add(key(e.pos)));
@@ -1347,6 +1784,15 @@
     out += '<text class="unit-label" style="font-size:' + fs + 'px" x="' + x + '" y="' + y + '">' + u.char + '</text>';
     const hp = u.hp != null ? u.hp : (u.panel ? u.panel.hp : '');
     if (hp != '') out += '<text class="unit-hp" style="font-size:' + (total > 1 ? 30 : 40) + 'px" x="' + x + '" y="' + (y + r * 1.18) + '">' + hp + '</text>';
+    // 负面状态角标（规则书 §5.5）：眩晕 / 中毒 / 减速，直接标在棋子右上角
+    const st = stOf(u);
+    const tags = [];
+    if (st.stun) tags.push('晕');
+    if (st.poison > 0) tags.push('毒' + st.poison);
+    if (st.slow) tags.push('缓');
+    if (tags.length) {
+      out += '<text class="unit-status" x="' + (x + r * 0.92) + '" y="' + (y - r * 0.78) + '">' + tags.join(' ') + '</text>';
+    }
     out += '</g>';
     return out;
   }
@@ -1355,16 +1801,19 @@
     let h = '';
     if (cls === 'u-player') {
       const p = u.panel;
-      h += '<b>石友 · 少年英雄</b><br>';
+      h += '<b>' + HERO.name + ' · ' + HERO.tag + '</b><br>';
       h += '生命 ' + p.hp + '/' + p.maxHp + '（8+体力×3）<br>';
       h += '武力 ' + p.wu + ' ／ 内力 ' + p.nei + ' ／ 灵力 ' + p.ling + ' ／ 体力 ' + p.ti + '<br>';
       h += '移动 ' + p.move + ' ／ 剩余移动 ' + p.moveLeft + ' ／ 剩余内力 ' + p.neiLeft + '<br>';
+      h += '武器：' + (u.weapons.join('、') || '无') + '<br>';
       h += '装备：' + u.equipment.map(e => e.name).join('、') + '<br>';
-      h += '<span class="tip-dim">琥珀串珠可召灵兽·通灵猫（交互阶段；每次召唤石友自减 5 点生命，灵猫阵亡后可重召）</span>';
+      h += '状态：' + (statusText(u) || '正常') + '<br>';
+      h += '<span class="tip-dim">' + HERO.role + '</span>';
     } else if (cls === 'u-minion') {
       h += '<b>' + u.name + '</b>（敌方）<br>';
       h += '生命 ' + u.hp + '/' + u.maxHp + '<br>';
       h += '攻击 ' + u.atk + ' ／ 移动 ' + u.move + ' ／ 射程 ' + u.range + '<br>';
+      if (statusText(u)) h += '状态：<b>' + statusText(u) + '</b><br>';
       if (isRanged(u)) {
         h += '<span class="tip-dim">射击需要通视：射线上不能有墙/岩石（单位不挡箭）。被挡住时它会继续移动找位置。</span><br>';
       }
@@ -1390,25 +1839,34 @@
     const pct = Math.round(p.hp / p.maxHp * 100);
     const eqHtml = player.equipment.map(e =>
       '<div class="eq-card" title="' + e.name + ' (' + e.type + ')">' +
-      '<img src="' + e.img + '" alt="' + e.name + '" onerror="this.style.background=&quot;#3a2f24&quot;this.style.minHeight=&quot;80px&quot;"/>' +
+      (e.img
+        ? '<img src="' + e.img + '" alt="' + e.name + '" onerror="this.style.background=&quot;#3a2f24&quot;this.style.minHeight=&quot;80px&quot;"/>'
+        : '<div class="eq-ph">' + (e.weapon || e.type) + '</div>') +
       '<div class="eq-info">' +
       '<div class="eq-name">' + e.name + '</div>' +
       '<div class="eq-stats">武力<span class="c-red">' + e.colors.wu + '</span> 内力<span class="c-green">' + e.colors.nei + '</span> 灵力<span class="c-blue">' + e.colors.ling + '</span> 体力<span class="c-orange">' + e.colors.ti + '</span></div>' +
       (e.moveBonus ? '<div class="eq-bonus">移动+1</div>' : '') +
       (e.beast ? '<div class="eq-bonus">灵兽：' + e.beast + '</div>' : '') +
+      (e.bonusVsDebuff ? '<div class="eq-bonus">对负面状态目标 +' + e.bonusVsDebuff + ' 伤害</div>' : '') +
+      (e.cleanse ? '<div class="eq-bonus">治疗时清除负面状态</div>' : '') +
       '</div></div>'
     ).join('');
+    const portrait = HERO.portrait
+      ? '<img class="hero-portrait" src="' + HERO.portrait + '" alt="' + HERO.name + '"/>'
+      : '<div class="hero-portrait hero-char">' + HERO.char + '</div>';
+    const st = statusText(player);
     el.innerHTML =
-      '<div class="hero-row"><img class="hero-portrait" src="素材原图/石友头像.jpg" alt="石友"/>' +
-      '<div class="meta"><h3>' + player.name + ' · 少年英雄</h3>' +
+      '<div class="hero-row">' + portrait +
+      '<div class="meta"><h3>' + player.name + ' · ' + HERO.tag + '</h3>' +
       '<div class="eq-line">装备合计 → 武力' + p.wu + ' / 内力' + p.nei + ' / 灵力' + p.ling + ' / 体力' + p.ti + '</div>' +
+      '<div class="eq-line">武器：' + (player.weapons.join('、') || '无') + '</div>' +
       '</div></div>' +
       '<div class="eq-row">' + eqHtml + '</div>' +
       '<div class="stat-grid">' + stat('武力', p.wu) + stat('内力', p.nei) + stat('灵力', p.ling) + stat('体力', p.ti) + '</div>' +
       '<div class="hpbar"><i style="width:' + pct + '%"></i></div>' +
       '<div class="sub"><span>生命 ' + p.hp + '/' + p.maxHp + '</span><span>移动 ' + p.moveLeft + '/' + p.move + '</span><span>内力 ' + p.neiLeft + '/' + p.nei + '</span></div>' +
-      '<div class="sub"><span>姬昌 ' + (jiChang.found ? jiChang.hp + '/' + jiChang.maxHp + '（已加入）' : '未发现') +
-        '</span><span>目标：送姬昌回起点（卒）</span></div>';
+      '<div class="sub"><span>状态：' + (st || '正常') + '</span><span>姬昌 ' + (jiChang.found ? jiChang.hp + '/' + jiChang.maxHp + '（已加入）' : '未发现') + '</span></div>' +
+      '<div class="sub"><span>目标：送姬昌回起点（卒）</span></div>';
   }
   function stat(k, v) { return '<div class="stat"><div class="k">' + k + '</div><div class="v">' + v + '</div></div>'; }
   function renderHand() {
@@ -1422,7 +1880,7 @@
     player.hand.forEach(card => {
       // 应对卡（格挡等）不能在己方出招阶段主动打出，只能在遭受近战攻击时由提示触发；
       // 本阶段已休整的，手牌全部锁住（休整与打招式卡只能二选一）
-      const dis = state.phase !== 'attack' || card.type === 'react' || state.rested || !canPlay(card);
+      const dis = state.phase !== 'attack' || state.rested || !playableNow(card);
       const div = document.createElement('div');
       div.className = 'card' + (state.selectedCard === card ? ' sel' : '') + (dis ? ' dis' : '');
       div.innerHTML =
@@ -1434,10 +1892,10 @@
         if (state.busy) return;
         // 应对卡（格挡）只在遭受近战攻击时由提示触发，出招阶段点了也只提示不结算
         if (card.type === 'react') { playCard(card, null); return; }
-        // 无目标卡（调息等）：点击即结算，不需要再点棋盘选目标
+        // 无目标卡（调息/治疗符）：点击即结算，不需要再点棋盘选目标
         if (card.type === 'heal') { playCard(card, null); return; }
-        // 位移类招式（飞踢/回马枪）：点击后进入「自选移动落点」流程，不需要先选敌人
-        if (card.selfMove) { playCard(card, null); return; }
+        // 位移/飞跃/换位/纯移动：点击后进入自选落点流程，不需要先选敌人
+        if (card.selfMove || card.jump || card.swap || card.type === 'move') { playCard(card, null); return; }
         // 攻击卡：先选中，再点棋盘上的敌人作为目标
         state.selectedCard = (state.selectedCard === card) ? null : card;
         render();
@@ -1671,26 +2129,64 @@
     document.getElementById('modalBody').addEventListener('click', e => { if (e.target.tagName === 'IMG') e.target.classList.toggle('zoom'); });
   }
 
-  /* ---------------- 启动 ---------------- */
-  function restart() {
+  /* ---------------- 角色选择 ---------------- */
+  function heroStatHtml(h) {
+    const p = heroPanel(h);
+    return '<div class="hs-stats">' +
+      '<div>武力 <b>' + p.wu + '</b></div><div>内力 <b>' + p.nei + '</b></div>' +
+      '<div>灵力 <b>' + p.ling + '</b></div><div>体力 <b>' + p.ti + '</b></div>' +
+      '<div>生命 <b>' + p.hp + '</b></div><div>移动 <b>' + p.move + '</b></div>' +
+      '</div>';
+  }
+  function showHeroSelect() {
+    const wrap = document.getElementById('heroSelect');
+    const grid = document.getElementById('heroGrid');
+    if (!wrap || !grid) return;
+    grid.innerHTML = '';
+    Object.keys(HERO_DEFS).forEach(id => {
+      const h = HERO_DEFS[id];
+      const div = document.createElement('div');
+      div.className = 'hs-card';
+      div.tabIndex = 0;
+      div.innerHTML = '<div class="hs-char">' + h.char + '</div>' +
+        '<div class="hs-name">' + h.name + '</div>' +
+        '<div class="hs-tag">' + h.tag + '</div>' +
+        '<div class="hs-role">' + h.role + '</div>' + heroStatHtml(h);
+      const pick = function () { HERO = h; wrap.classList.add('hidden'); startRun(); };
+      div.addEventListener('click', pick);
+      div.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); }
+      });
+      grid.appendChild(div);
+    });
+    wrap.classList.remove('hidden');
+  }
+
+  /* ---------------- 启动 / 重开 ---------------- */
+  function startRun() {
     stopAttackAutoAdvance();
     phaseLock = false;
     freshState(); resetActionDeck();
     state.phase = 'move'; state.turn = 1; state.status = 'playing'; state.msg = '';
-    state.selectedCard = null; state.attackPlayed = false; state.rested = false; state.busy = false; state.catMode = false; state.catSummon = false; state.feitui = null; state.jiMoved = false; state.log = [];
+    state.selectedCard = null; state.attackPlayed = false; state.rested = false; state.busy = false;
+    state.catMode = false; state.catSummon = false; state.feitui = null;
+    state.jump = null; state.bonusMove = null;
+    state.jiMoved = false; state.log = [];
+    const p = heroPanel(HERO);
+    log('【第一章·地牢】' + HERO.name + '出发 —— 护送姬昌回到任意玩家起点（卒）即胜利。', 'win');
+    log('装备：' + HERO.equip.map(e => e.name + '（' + e.type + (e.weapon ? '·' + e.weapon : '') + '）').join('、') + '。', 'hit');
+    log('属性按 §3.1.3 求和：武力' + p.wu + ' / 内力' + p.nei + ' / 灵力' + p.ling + ' / 体力' + p.ti +
+        ' → 生命' + p.hp + ' / 移动' + p.move + '。', 'hit');
+    log('敌方：殷商步兵 HP5/攻3/移2/射程1 + 殷商弓兵 HP3/攻2/移1/射程3，会在卒格复活。', 'bad');
+    log('交互阶段可点「召灵猫」派出通灵猫（仅拥有琥珀串珠的角色可召）。灵猫也是敌方的攻击目标（§4.4）。', 'hit');
     render();
   }
+  function restart() { startRun(); }
   function init() {
-    freshState(); resetActionDeck();
-    state.phase = 'move'; state.turn = 1; state.status = 'playing'; state.msg = '';
-    state.selectedCard = null; state.attackPlayed = false; state.rested = false; state.busy = false; state.catMode = false; state.catSummon = false; state.feitui = null; state.jiMoved = false; state.log = [];
-    log('【第一章·地牢】护送姬昌回到任意玩家起点（卒）即胜利。', 'win');
-    log('石友装备：生锈的长枪（枪）、布衣、琥珀串珠（灵猫）。', 'hit');
-    log('属性按 §3.1.3 求和：武力2 / 内力1 / 灵力0 / 体力2 → 生命14 / 移动2。', 'hit');
-    log('敌方：殷商步兵 HP5/攻3/移2/射程1 + 殷商弓兵 HP3/攻2/移1/射程3，会在卒格复活。', 'bad');
-    log('交互阶段可点「召灵猫」派出通灵猫：移动2格、对相邻敌人造成1伤害；每次召唤石友自减 5 点生命，灵猫阵亡后可重召。灵猫也是敌方的攻击目标（§4.4）。', 'hit');
     bind();
-    render();
+    const bh = document.getElementById('btnHero');
+    if (bh) bh.addEventListener('click', function () { if (!state.busy) showHeroSelect(); });
+    showHeroSelect();
   }
   if (document.readyState === 'loading') window.addEventListener('DOMContentLoaded', init);
   else init();

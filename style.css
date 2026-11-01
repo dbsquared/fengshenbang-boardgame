@@ -307,3 +307,14 @@ button.primary:hover:not(:disabled){background:var(--seal2)}
 /* 单位身上的负面状态角标（眩晕 / 中毒 / 减速） */
 .unit-status{ fill:#ffcf5c; font-size:34px; font-weight:700; text-anchor:middle;
   paint-order:stroke; stroke:#150e07; stroke-width:7px; stroke-linejoin:round; pointer-events:none; }
+
+/* 角色选择卡片上的头像。
+   素材取自「角色面板」实物照片，插画上缘压着面板自带的「武器」栏目标题，
+   三位新角色的取景框已压到标题线以下（portraitPos=center top），标题不入画；
+   这层极轻的渐变压暗只用来柔化切边，让画面顶部不显得硬。 */
+.hs-thumb{ position:relative; margin-bottom:8px; border-radius:8px; overflow:hidden;
+  border:1px solid rgba(201,162,75,.35); background:#2a2016; }
+.hs-avatar{ display:block; width:100%; height:132px;
+  object-fit:cover; object-position:center 26%; }
+.hs-veil{ position:absolute; left:0; right:0; top:0; height:26%; pointer-events:none;
+  background:linear-gradient(180deg,rgba(10,7,4,.32) 0%,rgba(10,7,4,.12) 45%,rgba(10,7,4,0) 100%); }
